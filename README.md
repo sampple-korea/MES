@@ -1,3 +1,11 @@
+# 스크립트 설치 링크
+```
+https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
+```
+
+해당 링크를 애드가드 유저 스크립트 추가란에 붙여넣고 추가
+
+
 # MES (Mobile Element Selector)
 
 **버전**: 1.0.0  
@@ -40,13 +48,6 @@ Tampermonkey, Violentmonkey 등의 유저스크립트 매니저를 설치한 후
 - 이 스크립트는 모바일 기기에 최적화되어 있습니다.
 - 일부 사이트에서는 동작에 제한이 있을 수 있습니다.
 - 사용자는 본인의 차단 설정을 주기적으로 백업하는 것을 권장합니다.
-
-## Script Link
-```
-https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
-```
-
-해당 링크를 애드가드 유저 스크립트 추가란에 붙여넣고 추가
 
 ## 안내
 해당 원본 제작자의 코드에서 디자인, 편의성 등을 수정함.
