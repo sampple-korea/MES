@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Mobile Element Selector (Marteial M3)
-// @author       삼플
+// @author       삼플 with Gemini
 // @version      1.0.0
 // @description  모바일 요소 선택기
 // @match        *://*/*
@@ -8,8 +8,8 @@
 // @grant        GM_setClipboard
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @downloadURL  https://example.com
-// @updateURL    https://example.com
+// @downloadURL  https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
+// @updateURL    https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
 // ==/UserScript==
 
 (async function() {
