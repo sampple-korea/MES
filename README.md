@@ -1,6 +1,6 @@
 # 스크립트 설치 링크
 ```
-https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
+https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js
 ```
 
 해당 링크를 애드가드 유저 스크립트 추가란에 붙여넣고 추가
