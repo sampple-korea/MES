@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플 with Gemini
-// @version      1.1.0
+// @version      1.1.1
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      MIT
