@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         Mobile Element Selector
+// @name         MES(Mobile Element Selector)
 // @author       삼플 with Gemini
 // @version      1.1.0
-// @description  모바일 요소 선택기
+// @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      MIT
 // @grant        GM_setClipboard
@@ -20,7 +20,7 @@
     // --- I18N Strings (Preparation for multi-language support) ---
     const STRINGS = {
         panelTitle: '요소 차단',
-        settingsTitle: '설정',
+        settingsTitle: 'MES by 삼플',
         listTitle: '저장된 차단 규칙',
         selectedElementLabel: '선택된 요소 (CSS 선택자)',
         parentLevelLabel: '상위 요소 선택 레벨:',
