@@ -5,12 +5,14 @@ https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%2
 
 해당 링크를 애드가드 유저 스크립트 추가란에 붙여넣고 추가
 
+# greasyfork
+[https://greasyfork.org/en/scripts/534270-mes-mobile-element-selector](https://greasyfork.org/en/scripts/534270-mes-mobile-element-selector)
 
 # MES (Mobile Element Selector)
 
 **버전**: 1.0.0  
 **제작자**: 삼플 (with Gemini)  
-**라이선스**: MIT
+**라이선스**: MIT 
 **프로젝트**: [https://github.com/sampple-korea/MES](https://github.com/sampple-korea/MES)
 
 ## 소개
