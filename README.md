@@ -51,6 +51,6 @@ Tampermonkey, Violentmonkey 등의 유저스크립트 매니저를 설치한 후
 - 일부 사이트에서는 동작에 제한이 있을 수 있습니다.
 - 사용자는 본인의 차단 설정을 주기적으로 백업하는 것을 권장합니다.
 
-## 안내
-해당 원본 제작자의 코드에서 디자인, 편의성 등을 수정함.
+## Base Code
+해당 원본 제작자의 코드에서 디자인, 편의성, 기능추가 등을 수정함
 [https://m.dcinside.com/board/adguard/2551](https://m.dcinside.com/board/adguard/2551)
