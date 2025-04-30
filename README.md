@@ -10,7 +10,7 @@ https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%2
 
 # MES (Mobile Element Selector)
 
-**버전**: 1.0.0  
+**버전**: 1.1.1  
 **제작자**: 삼플 (with Gemini)  
 **라이선스**: MIT 
 **프로젝트**: [https://github.com/sampple-korea/MES](https://github.com/sampple-korea/MES)
