@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플 with Gemini
-// @version      1.1.1
+// @version      1.2.3
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      MIT
@@ -14,10 +14,9 @@
 
 (async function() {
     'use strict';
-    const SCRIPT_ID = "[MES v1.1.0 M3]";
+    const SCRIPT_ID = "[MES v1.2.3 M3]";
     const ADGUARD_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/AdGuard.svg/500px-AdGuard.svg.png';
 
-    // --- I18N Strings (Preparation for multi-language support) ---
     const STRINGS = {
         panelTitle: '요소 차단',
         settingsTitle: 'MES by 삼플',
@@ -40,6 +39,11 @@
         tempDisableLabel: '모든 규칙 임시 비활성화',
         backupLabel: '규칙 백업 (JSON)',
         restoreLabel: '규칙 복원 (JSON)',
+        togglePositionLabel: '토글 버튼 위치',
+        posTopLeft: '좌상',
+        posTopRight: '우상',
+        posBottomLeft: '좌하',
+        posBottomRight: '우하',
         on: 'ON',
         off: 'OFF',
         noRules: '저장된 규칙이 없습니다.',
@@ -72,20 +76,19 @@
         tempBlockingOff: '✅ 규칙 다시 활성화됨'
     };
 
-    // --- 기본 설정 값 정의 ---
     const DEFAULT_SETTINGS = {
         includeSiteName: true,
-        panelOpacity: 0.65, // Slightly less transparent default
+        panelOpacity: 0.65,
         toggleSizeScale: 1.0,
         toggleOpacity: 1.0,
         showAdguardLogo: false,
-        tempBlockingDisabled: false // New setting for temporary disable
+        tempBlockingDisabled: false,
+        toggleBtnCorner: 'bottom-right' // New setting for corner position
     };
 
-    // --- 설정 값 로드 및 검증 ---
     let settings = {};
-    const SETTINGS_KEY = 'mobileElementSelectorSettings_v1'; // Key for storing settings object
-    const BLOCKED_SELECTORS_KEY = 'mobileBlockedSelectors_v2'; // Updated key for rules (includes version implicitly)
+    const SETTINGS_KEY = 'mobileElementSelectorSettings_v1_2'; // Updated key to potentially reset old position data
+    const BLOCKED_SELECTORS_KEY = 'mobileBlockedSelectors_v2';
 
     async function loadSettings() {
         let storedSettings = {};
@@ -94,13 +97,11 @@
             storedSettings = JSON.parse(storedValue || '{}');
         } catch (e) {
             console.error(SCRIPT_ID, `Error loading settings from GM_getValue('${SETTINGS_KEY}'), using defaults.`, e);
-            storedSettings = { ...DEFAULT_SETTINGS }; // Use defaults on error
+            storedSettings = { ...DEFAULT_SETTINGS };
         }
 
-        // Apply defaults for missing keys and validate existing ones
         settings = { ...DEFAULT_SETTINGS, ...storedSettings };
 
-        // Validation
         settings.panelOpacity = parseFloat(settings.panelOpacity);
         if (isNaN(settings.panelOpacity) || settings.panelOpacity < 0.1 || settings.panelOpacity > 1.0) {
             settings.panelOpacity = DEFAULT_SETTINGS.panelOpacity;
@@ -117,6 +118,11 @@
         settings.showAdguardLogo = typeof settings.showAdguardLogo === 'boolean' ? settings.showAdguardLogo : DEFAULT_SETTINGS.showAdguardLogo;
         settings.tempBlockingDisabled = typeof settings.tempBlockingDisabled === 'boolean' ? settings.tempBlockingDisabled : DEFAULT_SETTINGS.tempBlockingDisabled;
 
+        const validCorners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+        if (!validCorners.includes(settings.toggleBtnCorner)) {
+            settings.toggleBtnCorner = DEFAULT_SETTINGS.toggleBtnCorner;
+        }
+
         console.log(SCRIPT_ID, "Settings loaded:", settings);
     }
 
@@ -130,19 +136,16 @@
         }
     }
 
-    // --- M3 Inspired CSS ---
     const style = document.createElement('style');
-    // (Keep the same CSS as before, just update variables based on loaded settings)
+
     function updateCSSVariables() {
         document.documentElement.style.setProperty('--panel-opacity', settings.panelOpacity);
         document.documentElement.style.setProperty('--toggle-size', `${56 * settings.toggleSizeScale}px`);
         document.documentElement.style.setProperty('--toggle-opacity', settings.toggleOpacity);
 
-        // Update panel background explicitly if already created
         document.querySelectorAll('#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel').forEach(p => {
             p.style.setProperty('background-color', `rgba(40, 43, 48, ${settings.panelOpacity})`, 'important');
         });
-        // Update toggle button size/opacity explicitly if already created
         if (toggleBtn) {
             toggleBtn.style.setProperty('width', `var(--toggle-size)`, 'important');
             toggleBtn.style.setProperty('height', `var(--toggle-size)`, 'important');
@@ -150,10 +153,42 @@
         }
     }
 
+    function applyToggleBtnPosition() {
+        if (!toggleBtn) return;
+
+        // Reset all potential positioning properties
+        toggleBtn.style.top = 'auto';
+        toggleBtn.style.left = 'auto';
+        toggleBtn.style.bottom = 'auto';
+        toggleBtn.style.right = 'auto';
+        toggleBtn.style.transform = '';
+
+        const margin = '20px'; // Consistent margin from corner
+
+        switch (settings.toggleBtnCorner) {
+            case 'top-left':
+                toggleBtn.style.top = margin;
+                toggleBtn.style.left = margin;
+                break;
+            case 'top-right':
+                toggleBtn.style.top = margin;
+                toggleBtn.style.right = margin;
+                break;
+            case 'bottom-left':
+                toggleBtn.style.bottom = margin;
+                toggleBtn.style.left = margin;
+                break;
+            case 'bottom-right':
+            default: // Default to bottom-right
+                toggleBtn.style.bottom = margin;
+                toggleBtn.style.right = margin;
+                break;
+        }
+        console.log(SCRIPT_ID, "Applied toggle button corner:", settings.toggleBtnCorner);
+    }
+
     style.textContent = `
-/* ==== Root Variables ==== */
 :root {
-    /* M3 Dark Theme Color Palette */
     --md-sys-color-primary: #a0c9ff; --md-sys-color-on-primary: #00325a;
     --md-sys-color-primary-container: #004880; --md-sys-color-on-primary-container: #d1e4ff;
     --md-sys-color-secondary: #bdc7dc; --md-sys-color-on-secondary: #283141;
@@ -170,13 +205,9 @@
     --md-sys-color-surface-container-high: rgba(227, 226, 230, 0.16);
     --md-sys-color-success: #90ee90; --md-sys-color-success-container: rgba(144, 238, 144, 0.1);
     --md-sys-color-warning: #ffcc80;
-
-    /* Opacity and Size Variables - Initial values set by JS */
     --panel-opacity: ${DEFAULT_SETTINGS.panelOpacity};
     --toggle-size: ${56 * DEFAULT_SETTINGS.toggleSizeScale}px;
     --toggle-opacity: ${DEFAULT_SETTINGS.toggleOpacity};
-
-    /* Base Font */
     --md-ref-typeface-plain: 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     --md-sys-typescale-body-large-font-family: var(--md-ref-typeface-plain);
     --md-sys-typescale-body-large-font-size: 16px;
@@ -186,27 +217,24 @@
     --md-sys-typescale-title-medium-font-size: 18px;
 }
 
-/* ==== Base UI ==== */
 .mobile-block-ui { z-index: 2147483646 !important; touch-action: manipulation !important; font-family: var(--md-sys-typescale-body-large-font-family); box-sizing: border-box; position: fixed !important; visibility: visible !important; color: var(--md-sys-color-on-surface); -webkit-tap-highlight-color: transparent !important; }
 
-/* ==== Panels ==== */
 #mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel {
     background-color: rgba(40, 43, 48, var(--panel-opacity)) !important; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
     color: var(--md-sys-color-on-surface); border-radius: 20px !important;
     box-shadow: 0 12px 17px 2px rgba(0,0,0,0.14), 0 5px 22px 4px rgba(0,0,0,0.12), 0 7px 8px -4px rgba(0,0,0,0.20) !important;
     border: 1px solid rgba(255, 255, 255, 0.12); padding: 18px 20px; width: calc(100% - 40px); max-width: 380px;
-    display: none; /* Managed by JS */
+    display: none;
     opacity: 0;
     backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out;
-    will-change: transform, opacity; /* Performance hint */
+    will-change: transform, opacity;
+    cursor: grab;
 }
 
-/* Panel Positioning */
 #mobile-block-panel { bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px) scale(0.95); z-index: 2147483645 !important; }
 #mobile-settings-panel, #mobile-blocklist-panel { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9); z-index: 2147483647 !important; max-width: 340px; }
 
-/* Panel Visible State */
 #mobile-block-panel.visible {
     opacity: 1;
     transform: translateX(-50%) translateY(0) scale(1);
@@ -218,7 +246,6 @@
 
 .mb-panel-title { font-size: var(--md-sys-typescale-title-medium-font-size); font-weight: 500; color: var(--md-sys-color-on-surface); text-align: center; margin: 0 0 24px 0; }
 
-/* ==== Slider ==== */
 .mb-slider { width: 100%; margin: 15px 0; -webkit-appearance: none; appearance: none; background: var(--md-sys-color-surface-variant); height: 5px; border-radius: 3px; outline: none; cursor: pointer; transition: background 0.3s ease; }
 .mb-slider:hover { background: var(--md-sys-color-outline); }
 .mb-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; background: var(--md-sys-color-primary); border-radius: 50%; cursor: pointer; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transition: background 0.3s ease, box-shadow 0.3s ease; }
@@ -226,57 +253,53 @@
 .mb-slider:active::-webkit-slider-thumb { box-shadow: 0 0 0 10px rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.25); }
 .mb-slider:active::-moz-range-thumb { box-shadow: 0 0 0 10px rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.25); }
 
-/* ==== Selected Element Highlight ==== */
 .selected-element {
     outline: 3px solid var(--md-sys-color-error) !important;
     outline-offset: 2px;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45) !important; /* Darker overlay */
-    background-color: rgba(255, 82, 82, 0.15) !important; /* Subtle bg tint */
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45) !important;
+    background-color: rgba(255, 82, 82, 0.15) !important;
     z-index: 2147483644 !important;
     transition: background-color 0.1s ease, outline 0.1s ease, box-shadow 0.1s ease;
     pointer-events: none;
 }
 
-/* ==== Toggle Button (FAB) ==== */
 #mobile-block-toggleBtn {
-    bottom: 20px !important; right: 20px !important; top: auto !important; left: auto !important;
+    /* Position is set by JS (applyToggleBtnPosition) */
     z-index: 2147483646 !important; background-color: var(--md-sys-color-primary-container) !important; color: var(--md-sys-color-on-primary-container) !important;
     opacity: var(--toggle-opacity) !important; width: var(--toggle-size) !important; height: var(--toggle-size) !important; border-radius: 18px !important; border: none !important; cursor: pointer !important;
     box-shadow: 0 6px 10px 0 rgba(0,0,0,0.14), 0 1px 18px 0 rgba(0,0,0,0.12), 0 3px 5px -1px rgba(0,0,0,0.20) !important;
-    transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease, opacity 0.3s ease;
+    transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease, opacity 0.3s ease, border 0.2s ease, top 0.3s ease, left 0.3s ease, bottom 0.3s ease, right 0.3s ease;
     display: flex !important; align-items: center !important; justify-content: center !important; overflow: hidden !important; backface-visibility: hidden; -webkit-backface-visibility: hidden; position: fixed !important; -webkit-tap-highlight-color: transparent !important;
 }
 #mobile-block-toggleBtn:active { transform: scale(0.95); box-shadow: 0 2px 4px -1px rgba(0,0,0,0.2), 0 4px 5px 0 rgba(0,0,0,0.14), 0 1px 10px 0 rgba(0,0,0,0.12) !important; }
-#mobile-block-toggleBtn.selecting { /* Selection Mode Active Style */
+#mobile-block-toggleBtn.selecting {
     background-color: var(--md-sys-color-primary) !important;
     color: var(--md-sys-color-on-primary) !important;
     box-shadow: 0 8px 10px 1px rgba(0,0,0,0.14), 0 3px 14px 2px rgba(0,0,0,0.12), 0 5px 5px -3px rgba(0,0,0,0.20) !important;
 }
+/* Remove editing-pos class, positioning is handled by corner setting */
 #mobile-block-toggleBtn .toggle-icon { width: 55%; height: 55%; display: block; margin: auto; background-color: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
 #mobile-block-toggleBtn .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'); }
-/* New icon for selection active */
 #mobile-block-toggleBtn.selecting .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'); }
 #mobile-block-toggleBtn .toggle-icon-adguard { background-image: url('${ADGUARD_LOGO_URL}'); background-size: contain; background-repeat: no-repeat; background-position: center; background-color: transparent !important; mask-image: none; -webkit-mask-image: none; width: 60%; height: 60%; }
 
-/* ==== Buttons ==== */
 .mb-btn { padding: 10px 24px; border: none; border-radius: 20px !important; font-size: var(--md-sys-typescale-label-large-font-size); font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease; text-align: center; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15); min-width: 64px; min-height: 40px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 1 !important; -webkit-tap-highlight-color: transparent !important; line-height: 1.5; display: inline-flex; align-items: center; justify-content: center; }
 .mb-btn:hover { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3), 0 2px 6px 2px rgba(0,0,0,0.15); }
 .mb-btn:active { transform: scale(0.97); box-shadow: none; }
 .mb-btn.primary { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
 .mb-btn.primary:hover { background-color: #b0d3ff; } .mb-btn.primary:active { background-color: #c0daff; }
-.mb-btn.secondary { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); } /* Updated Secondary */
+.mb-btn.secondary { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 .mb-btn.secondary:hover { background-color: #545d6e; } .mb-btn.secondary:active { background-color: #6a7385; }
-.mb-btn.tertiary { background-color: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); } /* Updated Tertiary */
+.mb-btn.tertiary { background-color: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
 .mb-btn.tertiary:hover { background-color: #6f5471; } .mb-btn.tertiary:active { background-color: #866a89; }
-.mb-btn.error { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); } /* Updated Error */
+.mb-btn.error { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .mb-btn.error:hover { background-color: #b12025; } .mb-btn.error:active { background-color: #c83c40; }
 .mb-btn.surface { background-color: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface-variant); }
 .mb-btn.surface:hover { background-color: #53575e; } .mb-btn.surface:active { background-color: #63676e; }
-.mb-btn.outline { background-color: transparent; color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline); box-shadow: none; } /* New Outline Style */
+.mb-btn.outline { background-color: transparent; color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline); box-shadow: none; }
 .mb-btn.outline:hover { background-color: rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.08); }
 .mb-btn.outline:active { background-color: rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.12); }
 
-/* ==== Layout & Info Panel ==== */
 .button-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 12px; margin-top: 24px; }
 #blocker-info-wrapper { margin-bottom: 15px; padding: 10px 14px; background-color: var(--md-sys-color-surface-variant); border-radius: 12px; border: 1px solid var(--md-sys-color-outline); }
 #blocker-info-label { display: block; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 6px; font-weight: 500; }
@@ -284,7 +307,6 @@
 #blocker-info:empty::after { content: '없음'; color: var(--md-sys-color-on-surface-variant); font-style: italic; }
 label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 5px; margin-top: 10px; }
 
-/* ==== Settings Panel ==== */
 .settings-item { margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
 .settings-item label { display: flex; justify-content: space-between; align-items: center; font-size: var(--md-sys-typescale-label-large-font-size); color: var(--md-sys-color-on-surface-variant); }
 .settings-item label .settings-label-text { flex-grow: 1; margin-right: 10px; }
@@ -293,9 +315,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #settings-toggle-site.active, #settings-adguard-logo.active, #settings-temp-disable.active { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
 #settings-toggle-site:not(.active), #settings-adguard-logo:not(.active), #settings-temp-disable:not(.active) { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 #settings-close, #settings-backup, #settings-restore { width: 100%; margin-top: 10px; }
-#settings-restore-input { display: none; } /* Hide file input */
+#settings-restore-input { display: none; }
 
-/* ==== Blocklist Panel ==== */
+/* Corner Selector Styles */
+.corner-selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 5px; }
+.corner-btn { padding: 8px 12px; min-width: 60px; font-size: var(--md-sys-typescale-label-medium-font-size); }
+.corner-btn.active { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.corner-btn:not(.active) { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+
 #blocklist-container { max-height: calc(70vh - 150px); overflow-y: auto; margin: 20px 0; padding-right: 8px; display: flex; flex-direction: column; gap: 10px; }
 .blocklist-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background-color: rgba(var(--md-sys-color-surface-variant-rgb, 67, 71, 78), 0.5); border-radius: 12px; border: 1px solid transparent; transition: background-color 0.2s, border-color 0.2s, opacity 0.3s ease, transform 0.3s ease; }
 .blocklist-item:hover { background-color: rgba(var(--md-sys-color-surface-variant-rgb, 67, 71, 78), 0.7); border-color: var(--md-sys-color-outline); }
@@ -306,28 +333,23 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .blocklist-btn-copy { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 #blocklist-empty { text-align:center; color: var(--md-sys-color-on-surface-variant); padding: 20px 0; }
 
-/* ==== Toast Notifications (Snackbar) ==== */
-#mes-toast-container { position: fixed; bottom: 90px; /* Adjusted position */ left: 50%; transform: translateX(-50%); z-index: 2147483647 !important; display: flex; flex-direction: column-reverse; /* Show newest at bottom */ align-items: center; gap: 10px; pointer-events: none; width: max-content; max-width: 90%; }
+#mes-toast-container { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 2147483647 !important; display: flex; flex-direction: column-reverse; align-items: center; gap: 10px; pointer-events: none; width: max-content; max-width: 90%; }
 .mes-toast { background-color: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); padding: 14px 20px; border-radius: 8px; box-shadow: 0 3px 5px -1px rgba(0,0,0,0.2), 0 6px 10px 0 rgba(0,0,0,0.14), 0 1px 18px 0 rgba(0,0,0,0.12); font-size: var(--md-sys-typescale-label-large-font-size); opacity: 0; transform: translateY(20px); transition: opacity 0.3s ease, transform 0.3s ease, background-color 0.3s ease; pointer-events: all; max-width: 100%; text-align: center; }
 .mes-toast.show { opacity: 1; transform: translateY(0); }
-/* Semantic Colors for Toasts */
-.mes-toast.info { background-color: #333; color: white; } /* Default M3 Snackbar */
+.mes-toast.info { background-color: #333; color: white; }
 .mes-toast.success { background-color: var(--md-sys-color-success-container); color: var(--md-sys-color-success); }
 .mes-toast.error { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .mes-toast.warning { background-color: #4d3a00; color: var(--md-sys-color-warning); }
     `;
     document.head.appendChild(style);
 
-    // --- UI 요소 생성 ---
     let panel, settingsPanel, toggleBtn, listPanel, toastContainer;
     function createUIElements() {
-        // Toast Container (Must be first for other elements to potentially use it)
         toastContainer = document.createElement('div');
         toastContainer.id = 'mes-toast-container';
         toastContainer.className = 'mobile-block-ui';
         document.body.appendChild(toastContainer);
 
-        // Main Blocker Panel (Bottom)
         panel = document.createElement('div');
         panel.id = 'mobile-block-panel';
         panel.className = 'mobile-block-ui';
@@ -348,7 +370,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             </div>`;
         document.body.appendChild(panel);
 
-        // Block List Panel (Center Modal)
         listPanel = document.createElement('div');
         listPanel.id = 'mobile-blocklist-panel';
         listPanel.className = 'mobile-block-ui';
@@ -358,7 +379,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             <button id="blocklist-close" class="mb-btn surface" style="width: 100%; margin-top: 15px;">${STRINGS.close}</button>`;
         document.body.appendChild(listPanel);
 
-        // Settings Panel (Center Modal)
         settingsPanel = document.createElement('div');
         settingsPanel.id = 'mobile-settings-panel';
         settingsPanel.className = 'mobile-block-ui';
@@ -400,6 +420,15 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 </label>
                 <input id="settings-toggle-opacity" type="range" class="mb-slider" min="0.1" max="1.0" step="0.05" value="${settings.toggleOpacity}" aria-label="Toggle Button Opacity">
             </div>
+            <div class="settings-item">
+                 <label><span class="settings-label-text">${STRINGS.togglePositionLabel}</span></label>
+                 <div class="corner-selector-grid">
+                     <button id="corner-tl" data-corner="top-left" class="mb-btn corner-btn">${STRINGS.posTopLeft}</button>
+                     <button id="corner-tr" data-corner="top-right" class="mb-btn corner-btn">${STRINGS.posTopRight}</button>
+                     <button id="corner-bl" data-corner="bottom-left" class="mb-btn corner-btn">${STRINGS.posBottomLeft}</button>
+                     <button id="corner-br" data-corner="bottom-right" class="mb-btn corner-btn">${STRINGS.posBottomRight}</button>
+                 </div>
+            </div>
             <div class="button-grid" style="margin-top: 20px; grid-template-columns: 1fr 1fr;">
                  <button id="settings-backup" class="mb-btn outline">${STRINGS.backupLabel}</button>
                  <button id="settings-restore" class="mb-btn outline">${STRINGS.restoreLabel}</button>
@@ -408,23 +437,20 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             <button id="settings-close" class="mb-btn surface" style="width: 100%; margin-top: 20px;">${STRINGS.close}</button>`;
         document.body.appendChild(settingsPanel);
 
-        // Toggle Button (FAB)
         toggleBtn = document.createElement('button');
         toggleBtn.id = 'mobile-block-toggleBtn';
         toggleBtn.className = 'mobile-block-ui';
         toggleBtn.setAttribute('aria-label', 'Toggle Element Selector');
-        document.body.appendChild(toggleBtn); // Append early
+        document.body.appendChild(toggleBtn);
 
-        // Apply loaded settings to CSS variables and button states
         updateCSSVariables();
-        updateToggleIcon(); // Set initial icon based on settings
+        updateToggleIcon();
+        applyToggleBtnPosition();
 
-        // Initialize event listeners and apply initial blocking
         initRefsAndEvents();
-        applyBlocking(); // Apply rules on load
+        applyBlocking();
     }
 
-    // --- Toast Notification Function ---
     function showToast(message, type = 'info', duration = 3000) {
         if (!toastContainer) {
             console.warn(SCRIPT_ID, "Toast container not ready for message:", message);
@@ -433,9 +459,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         const toast = document.createElement('div');
         toast.className = `mes-toast ${type}`;
         toast.textContent = message;
-        toastContainer.appendChild(toast); // Append to container
+        toastContainer.appendChild(toast);
 
-        // Force reflow for transition
         void toast.offsetWidth;
 
         requestAnimationFrame(() => {
@@ -445,25 +470,21 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         setTimeout(() => {
             toast.classList.remove('show');
             toast.addEventListener('transitionend', () => {
-                try { toast.remove(); } catch (e) { /* Ignore potential error if already removed */ }
+                try { toast.remove(); } catch (e) { }
             }, { once: true });
-            // Fallback removal in case transitionend doesn't fire
             setTimeout(() => {
-                try { toast.remove(); } catch (e) { /* Ignore */ }
-            }, 500); // Slightly longer than transition duration
+                try { toast.remove(); } catch (e) { }
+            }, 500);
         }, duration);
     }
 
-
-    // --- 전역 변수 ---
     let selecting = false;
     let selectedEl = null;
-    let initialTouchedElement = null; // Element initially touched
+    let initialTouchedElement = null;
     let touchStartX = 0, touchStartY = 0, touchMoved = false;
-    const moveThreshold = 15; // Increased threshold
-    let blockedSelectorsCache = []; // Cache for loaded rules
+    const moveThreshold = 15;
+    let blockedSelectorsCache = [];
 
-    // --- 함수: 차단목록 불러오기/저장 (Improved with try/catch and caching) ---
     async function loadBlockedSelectors() {
         let stored = '[]';
         try {
@@ -488,28 +509,24 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         const selectorsToSave = Array.isArray(list) ? list : [];
         try {
             await GM_setValue(BLOCKED_SELECTORS_KEY, JSON.stringify(selectorsToSave));
-            blockedSelectorsCache = [...selectorsToSave]; // Update cache
+            blockedSelectorsCache = [...selectorsToSave];
             console.log(SCRIPT_ID, `Saved ${selectorsToSave.length} rules.`);
         } catch (e) {
             console.error(SCRIPT_ID, "Error saving blocked selectors to GM:", e);
-            showToast(STRINGS.settingsSaveError, 'error'); // Use generic save error
+            showToast(STRINGS.settingsSaveError, 'error');
         }
     }
 
-    // --- 함수: 차단 규칙 적용/해제 ---
-    // Stores original display style for temporary disabling
     const originalDisplayMap = new Map();
 
     async function applyBlocking(showToastNotification = false) {
         if (settings.tempBlockingDisabled) {
             console.log(SCRIPT_ID, "Blocking temporarily disabled. Skipping application.");
-            // Ensure elements hidden by the script are shown if temp disable is active
-            disableAllBlocking(false); // Don't show toast here
-            return 0; // Indicate 0 rules applied
+            disableAllBlocking(false);
+            return 0;
         }
 
         console.log(SCRIPT_ID, "Applying block rules...");
-        // Ensure cache is populated if empty
         if (blockedSelectorsCache.length === 0) {
             await loadBlockedSelectors();
         }
@@ -532,39 +549,33 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                  console.warn(SCRIPT_ID, "Skipping rule with empty selector:", rule);
                  return;
             }
-            // Check domain match
             if (domain && domain !== '*' && currentHostname !== domain) {
-                return; // Rule not for this domain
+                return;
             }
 
             try {
-                // Use more robust querySelectorAll
                 const elements = document.querySelectorAll(cssSelector);
                 elements.forEach(el => {
-                     // Check if element is already hidden by THIS script or naturally
                      const isHiddenByScript = el.style.display === 'none' && el.hasAttribute('data-mes-hidden');
                      const isNaturallyHidden = window.getComputedStyle(el).display === 'none';
 
                      if (!isHiddenByScript && !isNaturallyHidden) {
-                         // Store original display if not already stored
                          if (!originalDisplayMap.has(el)) {
-                             originalDisplayMap.set(el, el.style.display || 'unset'); // Store 'unset' if inline style is empty
+                             originalDisplayMap.set(el, el.style.display || 'unset');
                          }
                          el.style.setProperty('display', 'none', 'important');
-                         el.setAttribute('data-mes-hidden', 'true'); // Mark as hidden by script
+                         el.setAttribute('data-mes-hidden', 'true');
                          count++;
                      } else if (isHiddenByScript) {
-                        // Ensure map has entry even if already hidden by script on page load
                         if (!originalDisplayMap.has(el)) {
-                           originalDisplayMap.set(el, 'unset'); // Assume unset if hidden before we could check
+                           originalDisplayMap.set(el, 'unset');
                         }
                      }
                 });
-                if(elements.length > 0) appliedCount++; // Count rule as applied if it matched any elements
+                if(elements.length > 0) appliedCount++;
 
             } catch (e) {
-                // Ignore querySelectorAll errors for potentially invalid selectors during runtime
-                // console.warn(SCRIPT_ID, `CSS selector error for rule "${rule}":`, e.message);
+                 // Ignore errors
             }
         });
 
@@ -574,10 +585,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         if (showToastNotification && appliedCount > 0 && !settings.tempBlockingDisabled) {
             showToast(STRINGS.blockingApplied(appliedCount), 'success', 2000);
         }
-        return appliedCount; // Return number of rules that potentially matched something
+        return appliedCount;
     }
 
-    // Function to disable all blocking temporarily
     function disableAllBlocking(showToastNotification = true) {
         console.log(SCRIPT_ID, "Disabling all blocking rules temporarily...");
         let restoredCount = 0;
@@ -585,10 +595,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             const originalDisplay = originalDisplayMap.get(el);
             if (originalDisplay === 'unset') {
                 el.style.removeProperty('display');
-            } else if (originalDisplay !== undefined) { // Check if we have a stored value
-                el.style.setProperty('display', originalDisplay, ''); // Restore original, remove important
+            } else if (originalDisplay !== undefined) {
+                el.style.setProperty('display', originalDisplay, '');
             } else {
-                 // Fallback if somehow not in map (shouldn't happen often)
                  el.style.removeProperty('display');
             }
             el.removeAttribute('data-mes-hidden');
@@ -600,50 +609,42 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         }
     }
 
-    // Function to re-enable blocking after temporary disable
     async function enableAllBlocking(showToastNotification = true) {
         console.log(SCRIPT_ID, "Re-enabling blocking rules...");
-        const appliedCount = await applyBlocking(false); // Re-apply rules without toast
+        const appliedCount = await applyBlocking(false);
         if (showToastNotification && appliedCount > 0) {
             showToast(STRINGS.tempBlockingOff, 'success', 2000);
         } else if (showToastNotification) {
-            showToast(STRINGS.tempBlockingOff, 'info', 1500); // Show info even if 0 applied
+            showToast(STRINGS.tempBlockingOff, 'info', 1500);
         }
     }
 
-
-    // --- 함수: 토글 버튼 아이콘 업데이트 ---
     function updateToggleIcon() {
         if (!toggleBtn) return;
         if (settings.showAdguardLogo) {
             toggleBtn.innerHTML = `<span class="toggle-icon toggle-icon-adguard" aria-hidden="true"></span>`;
         } else {
-            // Use plus icon normally, edit icon when selecting
             toggleBtn.innerHTML = `<span class="toggle-icon toggle-icon-plus" aria-hidden="true"></span>`;
         }
-        // Add/remove 'selecting' class which changes background and potentially icon via CSS
         toggleBtn.classList.toggle('selecting', selecting);
+        // No longer need editing-pos class
     }
 
-    // --- 함수: 고유 CSS 선택자 생성 (개선됨) ---
     function generateSelector(el, maxDepth = 7, requireUnique = true) {
         if (!el || el.nodeType !== 1 || el.closest('.mobile-block-ui')) return '';
 
-        // 1. Prioritize ID if unique and stable
         if (el.id) {
             const id = el.id;
             const escapedId = CSS.escape(id);
-            // Basic stability check: not just digits, not overly simple, no common dynamic patterns
             if (!/^\d+$/.test(id) && id.length > 2 && !id.startsWith('ember') && !id.startsWith('react') && !id.includes(':')) {
                 try {
                     if (document.querySelectorAll(`#${escapedId}`).length === 1) {
                         return `#${escapedId}`;
                     }
-                } catch (e) { /* Invalid ID selector */ }
+                } catch (e) { }
             }
         }
 
-        // 2. Generate Path with Stable Classes and nth-of-type fallback
         const parts = [];
         let current = el;
         let depth = 0;
@@ -651,7 +652,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         while (current && current.tagName && depth < maxDepth) {
             const tagName = current.tagName.toLowerCase();
             if (tagName === 'body' || tagName === 'html') break;
-            if (current.closest('.mobile-block-ui')) { // Stop if we hit our own UI
+            if (current.closest('.mobile-block-ui')) {
                 current = current.parentElement;
                 continue;
             }
@@ -659,23 +660,21 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             let part = tagName;
             let addedSpecificity = false;
 
-            // Try stable classes
             const stableClasses = Array.from(current.classList)
-                .filter(c => c && c.length > 2 && // Minimum length
-                              !/^[a-z]{1,2}$/i.test(c) && // Avoid things like 'a', 'b', 'is'
-                              !/\d/.test(c) && // Avoid classes with numbers (often dynamic)
-                              !/active|select|focus|hover|disabled|open|closed|visible|hidden|js-|ui-/i.test(c) && // Avoid common state classes
-                              !/^[A-Z0-9]{4,}$/.test(c) && // Avoid generated-like IDs (heuristic)
-                              !c.includes('--') && !c.includes('__') && // Avoid BEM modifiers/elements (can be unstable)
+                .filter(c => c && c.length > 2 &&
+                              !/^[a-z]{1,2}$/i.test(c) &&
+                              !/\d/.test(c) &&
+                              !/active|select|focus|hover|disabled|open|closed|visible|hidden|js-|ui-/i.test(c) &&
+                              !/^[A-Z0-9]{4,}$/.test(c) &&
+                              !c.includes('--') && !c.includes('__') &&
                               !['selected-element', 'mobile-block-ui'].some(uiClass => c.includes(uiClass)))
-                .slice(0, 2); // Limit to 2 classes for brevity
+                .slice(0, 2);
 
             if (stableClasses.length > 0) {
                 part += '.' + stableClasses.map(c => CSS.escape(c)).join('.');
                 addedSpecificity = true;
             }
 
-            // If no stable classes or still ambiguous among siblings, use nth-of-type
             if (!addedSpecificity || (current.parentElement && !current.parentElement.closest('.mobile-block-ui'))) {
                 const siblings = current.parentElement ? Array.from(current.parentElement.children) : [];
                 const sameTagSiblings = siblings.filter(sib => sib.tagName === current.tagName && !sib.closest('.mobile-block-ui'));
@@ -683,26 +682,22 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 if (sameTagSiblings.length > 1) {
                     const index = sameTagSiblings.indexOf(current) + 1;
                     if (index > 0) {
-                        // Only add nth-of-type if classes weren't specific enough OR there were no classes
                         part += `:nth-of-type(${index})`;
-                        addedSpecificity = true; // Mark that we added something
+                        addedSpecificity = true;
                     }
                 }
             }
-            // If no specific class or nth-of-type was added, just use the tag name (already set)
 
-            parts.unshift(part); // Add to beginning
+            parts.unshift(part);
 
-             // Early exit check: Try selector uniqueness after adding a part
-             if (requireUnique && parts.length > 0 && depth > 0) { // Check after adding parent info
+             if (requireUnique && parts.length > 0 && depth > 0) {
                  const tempSelector = parts.join(' > ');
                  try {
                      if (document.querySelectorAll(tempSelector).length === 1) {
-                         // Found a unique selector early
                           console.log(SCRIPT_ID, `Unique selector found early: ${tempSelector}`);
                          return tempSelector;
                      }
-                 } catch (e) { /* Ignore invalid intermediate selectors */ }
+                 } catch (e) { }
              }
 
             current = current.parentElement;
@@ -711,15 +706,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
         let finalSelector = parts.join(' > ');
 
-        // Final uniqueness check if required
         if (requireUnique && finalSelector) {
             try {
                 const matches = document.querySelectorAll(finalSelector);
                 if (matches.length !== 1) {
                     console.warn(SCRIPT_ID, `Generated selector "${finalSelector}" matches ${matches.length} elements. Trying parent recursively.`);
-                    // If not unique, try generating selector for the parent and prepending (limit recursion)
-                    if (el.parentElement && !el.parentElement.closest('.mobile-block-ui') && maxDepth > 0) { // Prevent infinite loop
-                       const parentSelector = generateSelector(el.parentElement, maxDepth -1, false); // Don't require parent to be unique itself
+                    if (el.parentElement && !el.parentElement.closest('.mobile-block-ui') && maxDepth > 0) {
+                       const parentSelector = generateSelector(el.parentElement, maxDepth -1, false);
                        if (parentSelector) {
                            const combinedSelector = parentSelector + " > " + finalSelector;
                            try {
@@ -729,20 +722,18 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                                } else {
                                     console.warn(SCRIPT_ID, `Combined selector "${combinedSelector}" still not unique.`);
                                }
-                           } catch(e) { /* Ignore combined error */ }
+                           } catch(e) { }
                        }
                     }
                      console.warn(SCRIPT_ID, `Could not guarantee uniqueness for: ${finalSelector}`);
-                    // Return the best guess if uniqueness failed
                     return finalSelector;
                 }
             } catch (e) {
                  console.error(SCRIPT_ID, `Error validating selector "${finalSelector}":`, e);
-                 return ''; // Invalid selector generated
+                 return '';
             }
         }
 
-        // Basic validation: ensure selector isn't empty or just body/html
         if (!finalSelector || finalSelector === 'body' || finalSelector === 'html') {
              return '';
         }
@@ -750,9 +741,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         return finalSelector;
     }
 
-    // --- 초기화: 참조 및 이벤트 리스너 설정 ---
     function initRefsAndEvents() {
-        // --- Get Element References ---
         const infoLabel = panel.querySelector('#blocker-info-label');
         const info = panel.querySelector('#blocker-info');
         const slider = panel.querySelector('#blocker-slider');
@@ -776,21 +765,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         const toggleSizeValue = settingsPanel.querySelector('#toggle-size-value');
         const toggleOpacitySlider = settingsPanel.querySelector('#settings-toggle-opacity');
         const toggleOpacityValue = settingsPanel.querySelector('#toggle-opacity-value');
+        const cornerButtons = settingsPanel.querySelectorAll('.corner-btn'); // Get all corner buttons
         const backupBtn = settingsPanel.querySelector('#settings-backup');
         const restoreBtn = settingsPanel.querySelector('#settings-restore');
         const restoreInput = settingsPanel.querySelector('#settings-restore-input');
 
-        // --- State Variables ---
         let isPreviewHidden = false;
         let previewedElement = null;
 
-        // --- Helper Functions ---
         function removeSelectionHighlight() {
             if (selectedEl) {
                 selectedEl.classList.remove('selected-element');
             }
             selectedEl = null;
-            // Keep initialTouchedElement until a new touch starts
             if (slider) slider.value = 0;
             if (info) info.textContent = '';
         }
@@ -802,10 +789,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                     if (originalDisplay === 'unset') {
                         previewedElement.style.removeProperty('display');
                     } else if (originalDisplay !== undefined) {
-                        previewedElement.style.setProperty('display', originalDisplay, ''); // remove !important
+                        previewedElement.style.setProperty('display', originalDisplay, '');
                     }
-                    delete previewedElement.dataset._original_display; // Clean up dataset
-                    // Re-add highlight if it's the currently selected element
+                    delete previewedElement.dataset._original_display;
                     if(previewedElement === selectedEl) {
                         previewedElement.classList.add('selected-element');
                     }
@@ -813,10 +799,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                      console.warn(SCRIPT_ID, "Error resetting preview style:", e)
                 }
             }
-            // Always reset button text/style
             if (previewBtn) {
                 previewBtn.textContent = STRINGS.preview;
-                previewBtn.classList.remove('tertiary'); // Use correct class
+                previewBtn.classList.remove('tertiary');
                 previewBtn.classList.add('secondary');
             }
             isPreviewHidden = false;
@@ -825,39 +810,33 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
         function updateInfo() {
             if (!info) return;
-            // Generate selector without requiring unique initially for display
             const selectorText = selectedEl ? generateSelector(selectedEl, 7, false) : '';
             info.textContent = selectorText;
             infoLabel.style.display = 'block';
         }
 
-        // Improved Panel Visibility Handling
         let activePanel = null;
         function setPanelVisibility(panelElement, visible) {
             if (!panelElement) return;
 
             if (visible) {
-                // Hide other panels first
                 [panel, settingsPanel, listPanel].forEach(p => {
                     if (p && p !== panelElement && p.classList.contains('visible')) {
                         p.classList.remove('visible');
-                        // Use transitionend for reliable hiding, with timeout fallback
                         const transitionEndHandler = () => {
                             if (!p.classList.contains('visible')) p.style.display = 'none';
                             p.removeEventListener('transitionend', transitionEndHandler);
                         };
                         p.addEventListener('transitionend', transitionEndHandler);
-                        setTimeout(() => { // Fallback
+                        setTimeout(() => {
                              if (!p.classList.contains('visible')) p.style.display = 'none';
                              p.removeEventListener('transitionend', transitionEndHandler);
                         }, 350);
                     }
                 });
 
-                // Show the target panel
                 activePanel = panelElement;
                 panelElement.style.display = 'block';
-                // Use double requestAnimationFrame for fade-in transition
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
                         panelElement.classList.add('visible');
@@ -866,19 +845,18 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             } else {
                  if (activePanel === panelElement) activePanel = null;
                  panelElement.classList.remove('visible');
-                 // Use transitionend for reliable hiding, with timeout fallback
                  const transitionEndHandler = () => {
                      if (!panelElement.classList.contains('visible')) panelElement.style.display = 'none';
                      panelElement.removeEventListener('transitionend', transitionEndHandler);
                  };
                  panelElement.addEventListener('transitionend', transitionEndHandler);
-                 setTimeout(() => { // Fallback
+                 setTimeout(() => {
                       if (!panelElement.classList.contains('visible')) panelElement.style.display = 'none';
                       panelElement.removeEventListener('transitionend', transitionEndHandler);
                  }, 350);
+                 // No longer need to check isEditingTogglePosition here
             }
         }
-
 
         async function addBlockRule(selector) {
             console.log('[addBlockRule] Attempting for selector:', selector);
@@ -891,20 +869,18 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 const hostname = location.hostname;
                 if (!hostname) {
                     console.error(SCRIPT_ID, "Could not get location.hostname");
-                    return { success: false, message: '호스트 이름을 가져올 수 없습니다.' }; // Keep original for specific error
+                    return { success: false, message: '호스트 이름을 가져올 수 없습니다.' };
                 }
                 fullSelector = hostname + fullSelector;
             }
 
-            // Use cached rules first
             if (blockedSelectorsCache.includes(fullSelector)) {
                 console.log(SCRIPT_ID, "Rule already exists:", fullSelector);
                 return { success: false, message: STRINGS.ruleExists };
             }
 
-            // Add to cache and save
             const updatedList = [...blockedSelectorsCache, fullSelector];
-            await saveBlockedSelectors(updatedList); // Save triggers cache update
+            await saveBlockedSelectors(updatedList);
 
             console.log(SCRIPT_ID, "Rule added:", fullSelector);
             return { success: true, rule: fullSelector };
@@ -913,26 +889,24 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         async function showList() {
             console.log('[showList] Function called');
             try {
-                // Load fresh data in case it changed elsewhere (though unlikely)
                 const arr = await loadBlockedSelectors();
                 console.log(`[showList] Rendering ${arr.length} rules.`);
-                listContainer.innerHTML = ''; // Clear previous list
+                listContainer.innerHTML = '';
 
                 if (arr.length === 0) {
                     listContainer.innerHTML = `<p id="blocklist-empty">${STRINGS.noRules}</p>`;
                 } else {
-                    arr.forEach((rule, index) => { // Use index for reliable deletion
+                    arr.forEach((rule, index) => {
                         const item = document.createElement('div');
                         item.className = 'blocklist-item';
 
                         const span = document.createElement('span');
                         span.textContent = rule;
-                        span.title = rule; // Tooltip for long rules
+                        span.title = rule;
 
                         const controlsDiv = document.createElement('div');
                         controlsDiv.className = 'blocklist-controls';
 
-                        // Copy Button
                         const copyButton = document.createElement('button');
                         copyButton.className = 'mb-btn blocklist-btn blocklist-btn-copy';
                         copyButton.textContent = STRINGS.copy;
@@ -947,37 +921,33 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                             }
                         });
 
-                        // Delete Button
                         const deleteButton = document.createElement('button');
                         deleteButton.className = 'mb-btn blocklist-btn blocklist-btn-delete';
-                        deleteButton.textContent = '삭제'; // Use text instead of icon for clarity
+                        deleteButton.textContent = '삭제';
                         deleteButton.title = '규칙 삭제';
                         deleteButton.addEventListener('click', async () => {
                             console.log('[showList] Delete button clicked for rule:', rule);
                             try {
-                                // Find the actual index in the current cache just in case
                                 const currentIndex = blockedSelectorsCache.indexOf(rule);
                                 if (currentIndex > -1) {
                                     blockedSelectorsCache.splice(currentIndex, 1);
-                                    await saveBlockedSelectors(blockedSelectorsCache); // Save the modified cache
+                                    await saveBlockedSelectors(blockedSelectorsCache);
 
-                                    // Animate removal
                                     item.style.opacity = '0';
                                     item.style.transform = 'translateX(20px) scale(0.95)';
                                     setTimeout(async () => {
-                                        item.remove(); // Remove element from DOM
-                                        // Check if list is now empty
+                                        item.remove();
                                         if (listContainer.childElementCount === 0) {
                                              listContainer.innerHTML = `<p id="blocklist-empty">${STRINGS.noRules}</p>`;
                                         }
-                                        await applyBlocking(false); // Re-apply rules (un-hide if needed)
+                                        await applyBlocking(false);
                                         showToast(STRINGS.ruleDeleted, 'info', 2000);
-                                    }, 300); // Match transition duration
+                                    }, 300);
 
                                 } else {
                                      console.warn("Rule not found in cache for deletion:", rule);
                                      showToast(STRINGS.ruleDeleteError, 'error');
-                                     await showList(); // Refresh list if state is inconsistent
+                                     await showList();
                                 }
                             } catch (deleteError) {
                                 console.error(SCRIPT_ID, "Error deleting rule:", deleteError);
@@ -991,55 +961,50 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                     });
                 }
                  console.log('[showList] Rendering list panel.');
-                 setPanelVisibility(listPanel, true); // Show the list panel
+                 setPanelVisibility(listPanel, true);
 
             } catch (error) {
                 console.error(SCRIPT_ID, "Error in showList:", error);
                 showToast(STRINGS.listShowError, 'error');
-                setPanelVisibility(listPanel, false); // Hide panel on error
+                setPanelVisibility(listPanel, false);
             }
         }
 
         function setBlockMode(enabled) {
-            if (!toggleBtn || !panel) return;
+            if (!toggleBtn || !panel) return; // Removed edit mode check
 
             selecting = enabled;
             toggleBtn.classList.toggle('selecting', enabled);
-            updateToggleIcon(); // Update icon based on state
+            updateToggleIcon();
 
             if (enabled) {
-                // Enter selection mode
                 setPanelVisibility(panel, true);
-                if (selectedEl) { // If an element was already selected, re-highlight
+                if (selectedEl) {
                     selectedEl.classList.add('selected-element');
                 }
-                updateInfo(); // Show info for potentially selected element
+                updateInfo();
             } else {
-                // Exit selection mode
                 setPanelVisibility(panel, false);
-                 // Only hide list/settings if they are the currently active panel
                 if (activePanel === listPanel) setPanelVisibility(listPanel, false);
                 if (activePanel === settingsPanel) setPanelVisibility(settingsPanel, false);
 
                 removeSelectionHighlight();
                 resetPreview();
-                initialTouchedElement = null; // Clear touch target on exit
+                initialTouchedElement = null;
             }
             console.log(SCRIPT_ID, "Selection mode:", enabled ? "ON" : "OFF");
         }
 
-        // --- Event Listeners ---
+        // Removed toggleEditPositionMode function
+
         console.log(SCRIPT_ID, 'Attaching event listeners...');
 
-        // Toggle Button
         toggleBtn.addEventListener('click', () => {
-            setBlockMode(!selecting);
+            setBlockMode(!selecting); // Simple toggle, no edit mode check needed
         });
 
-        // --- Main Panel Buttons ---
         copyBtn.addEventListener('click', () => {
             if (!selectedEl) { showToast(STRINGS.noElementSelected, 'warning'); return; }
-            // Generate selector requiring uniqueness for copy
             const selector = generateSelector(selectedEl, 7, true);
             if (!selector) { showToast(STRINGS.cannotGenerateSelector, 'error'); return; }
 
@@ -1053,8 +1018,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             } catch (err) {
                 console.error(SCRIPT_ID, "Error copying to clipboard:", err);
                 showToast(STRINGS.clipboardError, 'error');
-                // Fallback prompt
-                try { prompt(STRINGS.promptCopy, finalSelector); } catch (e) { /* Ignore prompt errors */}
+                try { prompt(STRINGS.promptCopy, finalSelector); } catch (e) { }
             }
         });
 
@@ -1062,33 +1026,28 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             if (!selectedEl) { showToast(STRINGS.noElementSelected, 'warning'); return; }
 
             if (!isPreviewHidden) {
-                // Check if element is already display:none
                 if (window.getComputedStyle(selectedEl).display === 'none') {
                     showToast(STRINGS.alreadyHidden, 'info');
                     return;
                 }
-                // Store original style and hide
                 const currentDisplay = selectedEl.style.display;
                 selectedEl.dataset._original_display = currentDisplay === '' ? 'unset' : currentDisplay;
                 selectedEl.style.setProperty('display', 'none', 'important');
 
                 previewBtn.textContent = STRINGS.restorePreview;
                 previewBtn.classList.remove('secondary');
-                previewBtn.classList.add('tertiary'); // Use tertiary for restore state
+                previewBtn.classList.add('tertiary');
                 isPreviewHidden = true;
                 previewedElement = selectedEl;
-                selectedEl.classList.remove('selected-element'); // Remove highlight during preview
+                selectedEl.classList.remove('selected-element');
                 console.log(SCRIPT_ID, "Previewing hide for:", selectedEl);
 
             } else {
-                // Restore preview
                  if (previewedElement && previewedElement !== selectedEl) {
-                     // If trying to restore while a *different* element is selected
                      showToast(STRINGS.previewDifferentElement, 'warning');
-                     return; // Don't restore if selection changed
+                     return;
                  }
-                 resetPreview(); // Resets button text/style and restores display
-                 // No need to re-add selected-element class here, resetPreview handles it
+                 resetPreview();
                  console.log(SCRIPT_ID, "Restored preview for:", previewedElement);
             }
         });
@@ -1098,7 +1057,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             if (!selectedEl) { showToast(STRINGS.noElementSelected, 'warning'); return; }
 
             try {
-                // Generate selector requiring uniqueness for saving
                 const selector = generateSelector(selectedEl, 7, true);
                 console.log('[addBtn] Generated selector for saving:', selector);
                 if (!selector) { showToast(STRINGS.cannotGenerateSelector, 'error'); return; }
@@ -1108,9 +1066,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
                 if (result.success) {
                      showToast(STRINGS.ruleSavedReloading, 'success', 2000);
-                     // Immediately apply the new rule visually
                      try {
-                         // Re-query based on the *saved* rule's selector part
                          const ruleSelector = result.rule.split('##')[1];
                          document.querySelectorAll(ruleSelector).forEach(el => {
                              if (!originalDisplayMap.has(el)) {
@@ -1122,13 +1078,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                      } catch (applyError) {
                          console.error(SCRIPT_ID, "Error applying rule immediately after save:", applyError);
                          showToast(STRINGS.ruleSavedApplyFailed, 'warning', 3000);
-                         // Still proceed to exit selection mode
                      }
-                     // Exit selection mode after successful save
                      setBlockMode(false);
 
                 } else {
-                    // Show error/info message from addBlockRule
                     showToast(result.message || STRINGS.ruleAddError, result.success ? 'success' : 'info');
                 }
             } catch (error) {
@@ -1139,49 +1092,44 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
         listBtn.addEventListener('click', () => {
             console.log('[listBtn] Clicked');
-             // Hide main panel before showing list
              setPanelVisibility(panel, false);
-             showList(); // This will handle showing the list panel
+             showList();
         });
 
         settingsBtn.addEventListener('click', () => {
              console.log('[settingsBtn] Clicked');
-             // Hide main panel before showing settings
              setPanelVisibility(panel, false);
-             setPanelVisibility(settingsPanel, true); // Show settings panel
+             setPanelVisibility(settingsPanel, true);
         });
 
         cancelBtn.addEventListener('click', () => {
-            setBlockMode(false); // Exit selection mode
+            setBlockMode(false);
         });
 
-        // --- List Panel Close Button ---
         listClose.addEventListener('click', () => {
             console.log('[listClose] Clicked');
             setPanelVisibility(listPanel, false);
-            // Restore main panel ONLY if selection mode was active when list was opened
             if (selecting) {
                 console.log('[listClose] Restoring main panel');
                 setPanelVisibility(panel, true);
             }
         });
 
-        // --- Settings Panel Buttons ---
         settingsClose.addEventListener('click', () => {
              console.log('[settingsClose] Clicked');
              setPanelVisibility(settingsPanel, false);
-             // Restore main panel ONLY if selection mode was active when settings was opened
              if (selecting) {
                  console.log('[settingsClose] Restoring main panel');
                  setPanelVisibility(panel, true);
              }
+             // No need to check isEditingTogglePosition
         });
 
         toggleSiteBtn.addEventListener('click', async () => {
             settings.includeSiteName = !settings.includeSiteName;
             toggleSiteBtn.textContent = settings.includeSiteName ? STRINGS.on : STRINGS.off;
             toggleSiteBtn.classList.toggle('active', settings.includeSiteName);
-            await saveSettings(); // Save all settings
+            await saveSettings();
             showToast(STRINGS.settingsSaved, 'info', 1500);
         });
 
@@ -1189,7 +1137,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             settings.showAdguardLogo = !settings.showAdguardLogo;
             adguardLogoToggleBtn.textContent = settings.showAdguardLogo ? STRINGS.on : STRINGS.off;
             adguardLogoToggleBtn.classList.toggle('active', settings.showAdguardLogo);
-            updateToggleIcon(); // Update FAB icon immediately
+            updateToggleIcon();
             await saveSettings();
             showToast(STRINGS.settingsSaved, 'info', 1500);
         });
@@ -1198,38 +1146,55 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             settings.tempBlockingDisabled = !settings.tempBlockingDisabled;
             tempDisableBtn.textContent = settings.tempBlockingDisabled ? STRINGS.on : STRINGS.off;
             tempDisableBtn.classList.toggle('active', settings.tempBlockingDisabled);
-            tempDisableBtn.classList.toggle('error', settings.tempBlockingDisabled); // Add error style when ON
-            tempDisableBtn.classList.toggle('secondary', !settings.tempBlockingDisabled); // Use secondary when OFF
+            tempDisableBtn.classList.toggle('error', settings.tempBlockingDisabled);
+            tempDisableBtn.classList.toggle('secondary', !settings.tempBlockingDisabled);
 
             if (settings.tempBlockingDisabled) {
-                disableAllBlocking(); // Disables and shows toast
+                disableAllBlocking();
             } else {
-                await enableAllBlocking(); // Re-enables and shows toast
+                await enableAllBlocking();
             }
             await saveSettings();
-            // No extra toast needed here, enable/disable functions show toasts
         });
 
+        // Corner button listeners
+        const updateCornerButtons = (activeCorner) => {
+            cornerButtons.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.corner === activeCorner);
+            });
+        };
 
-        // --- Settings Sliders (with debounced save) ---
+        cornerButtons.forEach(button => {
+            button.addEventListener('click', async () => {
+                const selectedCorner = button.dataset.corner;
+                if (settings.toggleBtnCorner !== selectedCorner) {
+                    settings.toggleBtnCorner = selectedCorner;
+                    updateCornerButtons(selectedCorner);
+                    applyToggleBtnPosition();
+                    await saveSettings();
+                    showToast(STRINGS.settingsSaved, 'info', 1500);
+                }
+            });
+        });
+
+        // Initialize corner button active state
+        updateCornerButtons(settings.toggleBtnCorner);
+
+
         let saveTimeout;
         const debounceSaveSettings = () => {
             clearTimeout(saveTimeout);
             saveTimeout = setTimeout(async () => {
                 await saveSettings();
-                // Avoid toast spam on slider changes
-                // showToast(STRINGS.settingsSaved, 'info', 1000);
                 console.log(SCRIPT_ID, "Settings saved via debounce");
-            }, 500); // Save after 500ms of inactivity
+            }, 500);
         };
 
         panelOpacitySlider.addEventListener('input', e => {
             const newValue = parseFloat(e.target.value);
             settings.panelOpacity = newValue;
             panelOpacityValue.textContent = newValue.toFixed(2);
-            // Update CSS variable directly for immediate effect
             document.documentElement.style.setProperty('--panel-opacity', newValue);
-            // Explicitly update background for panels that might already exist
              document.querySelectorAll('#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel').forEach(p => {
                   p.style.setProperty('background-color', `rgba(40, 43, 48, ${newValue})`, 'important');
              });
@@ -1241,7 +1206,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             settings.toggleSizeScale = newValue;
             toggleSizeValue.textContent = newValue.toFixed(1) + 'x';
             document.documentElement.style.setProperty('--toggle-size', `${56 * newValue}px`);
-            // Update button size directly if it exists
             if (toggleBtn) {
                  toggleBtn.style.setProperty('width', `var(--toggle-size)`, 'important');
                  toggleBtn.style.setProperty('height', `var(--toggle-size)`, 'important');
@@ -1260,15 +1224,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             debounceSaveSettings();
         });
 
-        // --- Backup and Restore ---
         backupBtn.addEventListener('click', async () => {
             try {
-                const rules = await loadBlockedSelectors(); // Get current rules
+                const rules = await loadBlockedSelectors();
                 if (rules.length === 0) {
                     showToast('ℹ️ 백업할 규칙이 없습니다.', 'info');
                     return;
                 }
-                const jsonString = JSON.stringify(rules, null, 2); // Pretty print JSON
+                const jsonString = JSON.stringify(rules, null, 2);
                 const blob = new Blob([jsonString], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -1287,7 +1250,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         });
 
         restoreBtn.addEventListener('click', () => {
-             restoreInput.click(); // Trigger hidden file input
+             restoreInput.click();
         });
 
         restoreInput.addEventListener('change', async (event) => {
@@ -1300,31 +1263,26 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                     const content = e.target.result;
                     const parsedRules = JSON.parse(content);
 
-                    // Validation: Check if it's an array of strings
                     if (!Array.isArray(parsedRules) || !parsedRules.every(item => typeof item === 'string')) {
                          throw new Error("Invalid file content - expected an array of strings.");
                     }
-                    // Basic check for rule format (contains ##) - optional but good
                     if (!parsedRules.every(item => item.includes('##') || parsedRules.length === 0)) {
                          console.warn(SCRIPT_ID, "Restored rules contain items without '##'. Proceeding anyway.");
                     }
 
-                    await saveBlockedSelectors(parsedRules); // Save the restored rules
-                    await applyBlocking(true); // Apply the newly restored rules with notification
+                    await saveBlockedSelectors(parsedRules);
+                    await applyBlocking(true);
                     showToast(STRINGS.restoreSuccess, 'success', 2500);
 
-                    // Refresh list view if it's currently open
                     if (listPanel.classList.contains('visible')) {
                         await showList();
                     }
-                     // Refresh settings view for temp disable toggle if open
                     if (settingsPanel.classList.contains('visible')) {
                        tempDisableBtn.classList.toggle('active', settings.tempBlockingDisabled);
                        tempDisableBtn.classList.toggle('error', settings.tempBlockingDisabled);
                        tempDisableBtn.classList.toggle('secondary', !settings.tempBlockingDisabled);
                        tempDisableBtn.textContent = settings.tempBlockingDisabled ? STRINGS.on : STRINGS.off;
                     }
-
 
                 } catch (err) {
                     console.error(SCRIPT_ID, "Restore failed:", err);
@@ -1334,7 +1292,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                          showToast(STRINGS.restoreErrorGeneral, 'error');
                      }
                 } finally {
-                     // Reset file input to allow selecting the same file again
                      restoreInput.value = '';
                 }
             };
@@ -1346,210 +1303,164 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             reader.readAsText(file);
         });
 
-
-        // --- Element Selection Logic (Touch Events - Refined) ---
          document.addEventListener('touchstart', e => {
-             if (!selecting) return;
-             const touch = e.touches[0];
-             // Ignore touches starting on the UI itself
-             if (touch.target.closest('.mobile-block-ui')) {
+             if (!selecting) return; // Only active when selecting
+
+             // Ignore touches starting on any UI element
+             if (e.target.closest('.mobile-block-ui')) {
                  initialTouchedElement = null;
                  return;
              }
+
+             const touch = e.touches[0];
              touchStartX = touch.clientX;
              touchStartY = touch.clientY;
              touchMoved = false;
-             // Try to get the element directly under the finger *now*
-             // Use elementFromPoint carefully, might pick overlay in some cases
+
              const potentialTarget = document.elementFromPoint(touchStartX, touchStartY);
              if (potentialTarget && !potentialTarget.closest('.mobile-block-ui') && potentialTarget.tagName !== 'BODY' && potentialTarget.tagName !== 'HTML') {
                  initialTouchedElement = potentialTarget;
-                 // console.log("touchstart initial target:", initialTouchedElement); // Debug
              } else {
-                 initialTouchedElement = null; // Reset if target is invalid
+                 initialTouchedElement = null;
              }
-         }, { passive: true }); // Passive for performance
+         }, { passive: true });
 
          document.addEventListener('touchmove', e => {
-             if (!selecting || touchMoved || !e.touches[0]) return; // Ignore if already moved or no touch
-             // Don't check initialTouchedElement here, movement cancels selection intent regardless
+             if (!selecting || touchMoved || !e.touches[0]) return;
+
+              // Ignore moves starting on UI (shouldn't happen if start is ignored)
+              if (e.target.closest('.mobile-block-ui')) return;
+
+
              const touch = e.touches[0];
              const dx = touch.clientX - touchStartX;
              const dy = touch.clientY - touchStartY;
              if (Math.sqrt(dx * dx + dy * dy) > moveThreshold) {
                  touchMoved = true;
-                  console.log("touchmove detected, cancelling selection intent"); // Debug
-                 // If movement is detected, clear the selection highlight immediately
                  if (selectedEl) {
                      selectedEl.classList.remove('selected-element');
-                     // Don't nullify selectedEl yet, maybe needed if touch ends on UI
                  }
-                 initialTouchedElement = null; // Cancel the initial target due to movement
+                 initialTouchedElement = null;
              }
-         }, { passive: true }); // Passive is okay here
+         }, { passive: true });
 
          document.addEventListener('touchend', e => {
              if (!selecting) return;
 
              const touchEndTarget = e.target;
 
-             // Case 1: Touch ends on a button within our UI (panel, toggle)
-             if (touchEndTarget.closest('.mobile-block-ui .mb-btn') || touchEndTarget === toggleBtn || toggleBtn.contains(touchEndTarget) ) {
-                 console.log(SCRIPT_ID, 'touchend on UI button, letting click event handle.');
-                 // Reset move flag but don't prevent default, allow click
-                 touchMoved = false;
-                 // Keep initialTouchedElement, might be needed by slider
+             // Ignore touches ending on UI buttons or the toggle button itself
+             if (touchEndTarget.closest('.mobile-block-ui .mb-btn') || touchEndTarget === toggleBtn || toggleBtn.contains(touchEndTarget)) {
+                 touchMoved = false; // Reset move flag but allow click
                  return;
              }
-
-             // Case 2: Touch ends somewhere else within our UI (panel background, etc.)
+              // Ignore touches ending on panel backgrounds etc.
              if (touchEndTarget.closest('.mobile-block-ui')) {
-                  console.log(SCRIPT_ID, 'touchend on UI background.');
-                  // If moved, potentially re-add highlight if it was removed during move
-                  if (touchMoved && selectedEl) {
-                     // selectedEl.classList.add('selected-element'); // Re-highlight if needed (optional)
-                  }
-                  touchMoved = false; // Reset move flag
-                  // Keep initialTouchedElement
-                  return; // Don't select page elements
-             }
-
-             // Case 3: Touch ends on the page content
-
-             // Prevent default browser actions (like link navigation, text selection) *only* if not moved
-             if (!touchMoved) {
-                  try {
-                      e.preventDefault();
-                      e.stopImmediatePropagation(); // Crucial to prevent clicks after touch
-                       console.log(SCRIPT_ID, 'touchend on page, prevented default'); // Debug
-                  } catch (err) {
-                       console.warn(SCRIPT_ID, "Could not preventDefault/stopImmediatePropagation on touchend:", err);
-                  }
-             } else {
-                 // If moved, reset the flag and do nothing (allow scrolling/native behavior)
-                  console.log(SCRIPT_ID, 'touchend on page after move, doing nothing'); // Debug
                  touchMoved = false;
                  return;
              }
 
 
-             // If we reach here, it was a tap on the page content (no movement)
+             if (!touchMoved) {
+                 try {
+                     e.preventDefault();
+                     e.stopImmediatePropagation();
+                 } catch (err) {
+                      console.warn(SCRIPT_ID, "Could not preventDefault/stopImmediatePropagation on touchend:", err);
+                 }
+             } else {
+                 touchMoved = false;
+                 return; // It was a drag on the page
+             }
+
+             // Process tap for selection
              const touch = e.changedTouches[0];
-             if (!touch) return; // Should not happen, but safety check
+             if (!touch) return;
 
-             // Use the element identified at touchstart if valid, otherwise re-check
              let targetEl = initialTouchedElement;
-
-             // If initial was bad or became invalid, try elementFromPoint again (less reliable)
              if (!targetEl || targetEl.closest('.mobile-block-ui')) {
                   targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
              }
+             while (targetEl && (targetEl.nodeType !== 1 || targetEl.closest('.mobile-block-ui'))) {
+                 targetEl = targetEl.parentElement;
+             }
 
-             // Final validation of the target
-             if (targetEl && !targetEl.closest('.mobile-block-ui') && targetEl.tagName !== 'BODY' && targetEl.tagName !== 'HTML') {
-                 console.log(SCRIPT_ID, "Valid element selected:", targetEl);
-                 // Clear previous state
-                 removeSelectionHighlight(); // Removes class from old selectedEl
-                 resetPreview();
-
-                 // Set new state
-                 selectedEl = targetEl;
-                 initialTouchedElement = selectedEl; // Update initial touch ref to the newly selected
-                 selectedEl.classList.add('selected-element');
-                 if (slider) slider.value = 0; // Reset slider on new selection
-                 updateInfo(); // Update panel display
-             } else {
-                 // Tapped on invalid area (background, html, body, or our UI somehow missed)
-                 console.log(SCRIPT_ID, "Invalid area tapped or elementFromPoint failed.");
+             if (targetEl && targetEl.tagName !== 'BODY' && targetEl.tagName !== 'HTML') {
                  removeSelectionHighlight();
                  resetPreview();
-                 updateInfo(); // Clear info panel
-                 initialTouchedElement = null; // No valid element to reference
+                 selectedEl = targetEl;
+                 initialTouchedElement = selectedEl;
+                 selectedEl.classList.add('selected-element');
+                 if (slider) slider.value = 0;
+                 updateInfo();
+             } else {
+                 removeSelectionHighlight();
+                 resetPreview();
+                 updateInfo();
+                 initialTouchedElement = null;
              }
-         }, { capture: true, passive: false }); // Capture phase and NOT passive for preventDefault
+         }, { capture: true, passive: false });
 
-        // --- Slider Logic ---
         slider.addEventListener('input', (e) => {
-            // Ensure we have a starting point for traversal
             if (!initialTouchedElement) {
                 if (selectedEl) {
-                    initialTouchedElement = selectedEl; // Use current selection as base if touch start failed
+                    initialTouchedElement = selectedEl;
                 } else {
-                    return; // No element selected or touched
+                    return;
                 }
             }
-
-            resetPreview(); // Cancel preview when adjusting level
-
+            resetPreview();
             const level = parseInt(e.target.value, 10);
-            let current = initialTouchedElement; // Start from the initial touch/selection
-
+            let current = initialTouchedElement;
             for (let i = 0; i < level && current.parentElement; i++) {
-                // Stop traversal if hitting body/html or our UI boundary
                 if (['body', 'html'].includes(current.parentElement.tagName.toLowerCase()) || current.parentElement.closest('.mobile-block-ui')) {
                     break;
                 }
                 current = current.parentElement;
             }
-
-            // Update selection only if the target element changes
             if (selectedEl !== current) {
                 if (selectedEl) {
                     selectedEl.classList.remove('selected-element');
                 }
                 selectedEl = current;
                 selectedEl.classList.add('selected-element');
-                updateInfo(); // Update selector display
+                updateInfo();
             }
         });
 
-        // --- Draggable UI (Keep existing logic) ---
-        function makeDraggable(el) {
+        function makePanelDraggable(el) { // Renamed for clarity
             if (!el) return;
             let startX, startY, elementStartX, elementStartY;
             let dragging = false;
             let movedSinceStart = false;
-            const dragThreshold = 5; // Pixels before drag starts
+            const dragThreshold = 5;
 
             const handleTouchStart = (e) => {
-                 // Prevent dragging if interacting with buttons, inputs, sliders, or scrollable areas inside the element
-                 let interactiveTarget = e.target.closest('button, input[type="range"], input[type="file"], select, textarea, .blocklist-item, #blocklist-container, #blocker-info');
-                 if (interactiveTarget && el.contains(interactiveTarget)) {
-                    // Special check for scrollable areas
+                let interactiveTarget = e.target.closest('button, input[type="range"], input[type="file"], select, textarea, .blocklist-item, #blocklist-container, #blocker-info');
+                if (interactiveTarget && el.contains(interactiveTarget)) {
                     if (interactiveTarget.id === 'blocklist-container' || interactiveTarget.id === 'blocker-info') {
                         if (interactiveTarget.scrollHeight > interactiveTarget.clientHeight) {
-                             console.log("Drag cancelled: Touch started on scrollable content");
-                             dragging = false;
-                             return; // Don't drag if starting on scrollable content
+                            dragging = false; return;
                         }
                     } else {
-                         console.log("Drag cancelled: Touch started on interactive element");
-                         dragging = false;
-                         return; // Don't drag interactive elements
+                        dragging = false; return;
                     }
-                 }
+                }
 
-                 if (e.touches.length > 1) { // Ignore multi-touch
-                    dragging = false;
-                    return;
-                 }
+                if (e.touches.length > 1) { dragging = false; return; }
 
-                 dragging = true; // Tentatively start dragging
-                 movedSinceStart = false; // Reset move flag
+                dragging = true;
+                movedSinceStart = false;
 
-                 const touch = e.touches[0];
-                 startX = touch.clientX;
-                 startY = touch.clientY;
+                const touch = e.touches[0];
+                startX = touch.clientX;
+                startY = touch.clientY;
+                const rect = el.getBoundingClientRect();
+                elementStartX = rect.left;
+                elementStartY = rect.top;
 
-                 // Get current position using getBoundingClientRect for accuracy
-                 const rect = el.getBoundingClientRect();
-                 elementStartX = rect.left;
-                 elementStartY = rect.top;
-
-                 // Temporarily disable transition for smooth dragging
-                 el.style.transition = 'none';
-                 el.style.cursor = 'grabbing';
-                 // console.log("Drag start tentative", {startX, startY, elementStartX, elementStartY});
+                el.style.transition = 'none';
+                el.style.cursor = 'grabbing';
             };
 
             const handleTouchMove = (e) => {
@@ -1559,82 +1470,61 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 const dx = touch.clientX - startX;
                 const dy = touch.clientY - startY;
 
-                // Check threshold only once
                 if (!movedSinceStart) {
                     if (Math.sqrt(dx * dx + dy * dy) > dragThreshold) {
                         movedSinceStart = true;
-                         console.log("Drag threshold passed, moving element");
-                         // Prevent scrolling ONLY after drag threshold is passed
-                         try { e.preventDefault(); } catch {}
-                    } else {
-                         return; // Below threshold, don't move yet
-                    }
-                } else {
-                     // Already dragging, prevent default always
-                     try { e.preventDefault(); } catch {}
-                }
-
+                        try { e.preventDefault(); } catch {}
+                    } else { return; }
+                } else { try { e.preventDefault(); } catch {} }
 
                 let newX = elementStartX + dx;
                 let newY = elementStartY + dy;
-
-                // Constrain within viewport
                 const elWidth = el.offsetWidth;
                 const elHeight = el.offsetHeight;
                 const parentWidth = window.innerWidth;
                 const parentHeight = window.innerHeight;
-
                 newX = Math.max(0, Math.min(newX, parentWidth - elWidth));
                 newY = Math.max(0, Math.min(newY, parentHeight - elHeight));
 
-                // Apply transform for positioning (usually smoother)
-                // Reset potential conflicting styles
-                el.style.left = '0px';
-                el.style.top = '0px';
+                el.style.left = `${newX}px`;
+                el.style.top = `${newY}px`;
                 el.style.right = 'auto';
                 el.style.bottom = 'auto';
-                el.style.transform = `translate(${newX}px, ${newY}px)`;
+                el.style.transform = ''; // Use left/top for panels
             };
 
-            const handleTouchEnd = (e) => {
+            const handleTouchEnd = async (e) => {
                 if (!dragging) return;
                 dragging = false;
-                // Restore transition and cursor
                 el.style.transition = '';
-                el.style.cursor = '';
+                el.style.cursor = 'grab';
 
                 if (movedSinceStart) {
-                     console.log("Drag ended");
-                    // Prevent click event after dragging if needed
-                     try {
-                         // e.preventDefault(); // Sometimes needed, test carefully
-                         // e.stopPropagation();
-                     } catch {}
+                    // No need to save panel positions currently
+                    try { /* Optional event handling */ } catch {}
                 } else {
-                     console.log("Drag cancelled (ended before threshold)");
+                    // Click/Tap occurred
                 }
-                movedSinceStart = false; // Reset for next touch
+                movedSinceStart = false;
             };
 
-            // Add listeners
-            el.addEventListener('touchstart', handleTouchStart, { passive: true }); // Start passive
-            el.addEventListener('touchmove', handleTouchMove, { passive: false }); // Move non-passive for preventDefault
-            el.addEventListener('touchend', handleTouchEnd, { passive: false }); // End non-passive
-            el.addEventListener('touchcancel', handleTouchEnd, { passive: false }); // Handle cancellation
+            el.addEventListener('touchstart', handleTouchStart, { passive: true });
+            el.addEventListener('touchmove', handleTouchMove, { passive: false });
+            el.addEventListener('touchend', handleTouchEnd, { passive: false });
+            el.addEventListener('touchcancel', handleTouchEnd, { passive: false });
         }
 
-        makeDraggable(panel);
-        makeDraggable(settingsPanel);
-        makeDraggable(toggleBtn);
-        makeDraggable(listPanel);
+        // Apply dragging only to panels
+        makePanelDraggable(panel);
+        makePanelDraggable(settingsPanel);
+        makePanelDraggable(listPanel);
+        // Do NOT make toggleBtn draggable
 
         console.log(SCRIPT_ID, 'Initialization complete.');
-    } // End of initRefsAndEvents
+    }
 
-    // --- 스크립트 실행 시작 ---
-    // Wait for DOM ready before creating UI and initializing
     async function run() {
-        await loadSettings(); // Load settings first
+        await loadSettings();
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', createUIElements);
         } else {
