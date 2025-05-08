@@ -1,15 +1,16 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플 with Gemini
-// @version      1.2.3
+// @version      1.2.4
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      MIT
 // @grant        GM_setClipboard
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @downloadURL  https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
-// @updateURL    https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
+// @namespace https://adguard.com
+// @downloadURL https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js
+// @updateURL https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.meta.js
 // ==/UserScript==
 
 (async function() {
@@ -83,11 +84,11 @@
         toggleOpacity: 1.0,
         showAdguardLogo: false,
         tempBlockingDisabled: false,
-        toggleBtnCorner: 'bottom-right' // New setting for corner position
+        toggleBtnCorner: 'bottom-right'
     };
 
     let settings = {};
-    const SETTINGS_KEY = 'mobileElementSelectorSettings_v1_2'; // Updated key to potentially reset old position data
+    const SETTINGS_KEY = 'mobileElementSelectorSettings_v1_2';
     const BLOCKED_SELECTORS_KEY = 'mobileBlockedSelectors_v2';
 
     async function loadSettings() {
@@ -156,14 +157,13 @@
     function applyToggleBtnPosition() {
         if (!toggleBtn) return;
 
-        // Reset all potential positioning properties
         toggleBtn.style.top = 'auto';
         toggleBtn.style.left = 'auto';
         toggleBtn.style.bottom = 'auto';
         toggleBtn.style.right = 'auto';
         toggleBtn.style.transform = '';
 
-        const margin = '20px'; // Consistent margin from corner
+        const margin = '20px';
 
         switch (settings.toggleBtnCorner) {
             case 'top-left':
@@ -179,7 +179,7 @@
                 toggleBtn.style.left = margin;
                 break;
             case 'bottom-right':
-            default: // Default to bottom-right
+            default:
                 toggleBtn.style.bottom = margin;
                 toggleBtn.style.right = margin;
                 break;
@@ -244,6 +244,22 @@
     transform: translate(-50%, -50%) scale(1);
 }
 
+/* Overrides for dragged panels: transform should only handle scale */
+#mobile-block-panel[data-was-dragged="true"] {
+    transform: scale(0.95); /* Closed state */
+}
+#mobile-block-panel[data-was-dragged="true"].visible {
+    transform: scale(1); /* Open state */
+}
+#mobile-settings-panel[data-was-dragged="true"],
+#mobile-blocklist-panel[data-was-dragged="true"] {
+    transform: scale(0.9); /* Closed state */
+}
+#mobile-settings-panel[data-was-dragged="true"].visible,
+#mobile-blocklist-panel[data-was-dragged="true"].visible {
+    transform: scale(1); /* Open state */
+}
+
 .mb-panel-title { font-size: var(--md-sys-typescale-title-medium-font-size); font-weight: 500; color: var(--md-sys-color-on-surface); text-align: center; margin: 0 0 24px 0; }
 
 .mb-slider { width: 100%; margin: 15px 0; -webkit-appearance: none; appearance: none; background: var(--md-sys-color-surface-variant); height: 5px; border-radius: 3px; outline: none; cursor: pointer; transition: background 0.3s ease; }
@@ -264,7 +280,6 @@
 }
 
 #mobile-block-toggleBtn {
-    /* Position is set by JS (applyToggleBtnPosition) */
     z-index: 2147483646 !important; background-color: var(--md-sys-color-primary-container) !important; color: var(--md-sys-color-on-primary-container) !important;
     opacity: var(--toggle-opacity) !important; width: var(--toggle-size) !important; height: var(--toggle-size) !important; border-radius: 18px !important; border: none !important; cursor: pointer !important;
     box-shadow: 0 6px 10px 0 rgba(0,0,0,0.14), 0 1px 18px 0 rgba(0,0,0,0.12), 0 3px 5px -1px rgba(0,0,0,0.20) !important;
@@ -277,7 +292,6 @@
     color: var(--md-sys-color-on-primary) !important;
     box-shadow: 0 8px 10px 1px rgba(0,0,0,0.14), 0 3px 14px 2px rgba(0,0,0,0.12), 0 5px 5px -3px rgba(0,0,0,0.20) !important;
 }
-/* Remove editing-pos class, positioning is handled by corner setting */
 #mobile-block-toggleBtn .toggle-icon { width: 55%; height: 55%; display: block; margin: auto; background-color: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
 #mobile-block-toggleBtn .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'); }
 #mobile-block-toggleBtn.selecting .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'); }
@@ -317,7 +331,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #settings-close, #settings-backup, #settings-restore { width: 100%; margin-top: 10px; }
 #settings-restore-input { display: none; }
 
-/* Corner Selector Styles */
 .corner-selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 5px; }
 .corner-btn { padding: 8px 12px; min-width: 60px; font-size: var(--md-sys-typescale-label-medium-font-size); }
 .corner-btn.active { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
@@ -627,7 +640,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             toggleBtn.innerHTML = `<span class="toggle-icon toggle-icon-plus" aria-hidden="true"></span>`;
         }
         toggleBtn.classList.toggle('selecting', selecting);
-        // No longer need editing-pos class
     }
 
     function generateSelector(el, maxDepth = 7, requireUnique = true) {
@@ -765,7 +777,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         const toggleSizeValue = settingsPanel.querySelector('#toggle-size-value');
         const toggleOpacitySlider = settingsPanel.querySelector('#settings-toggle-opacity');
         const toggleOpacityValue = settingsPanel.querySelector('#toggle-opacity-value');
-        const cornerButtons = settingsPanel.querySelectorAll('.corner-btn'); // Get all corner buttons
+        const cornerButtons = settingsPanel.querySelectorAll('.corner-btn');
         const backupBtn = settingsPanel.querySelector('#settings-backup');
         const restoreBtn = settingsPanel.querySelector('#settings-restore');
         const restoreInput = settingsPanel.querySelector('#settings-restore-input');
@@ -854,7 +866,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                       if (!panelElement.classList.contains('visible')) panelElement.style.display = 'none';
                       panelElement.removeEventListener('transitionend', transitionEndHandler);
                  }, 350);
-                 // No longer need to check isEditingTogglePosition here
             }
         }
 
@@ -971,7 +982,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         }
 
         function setBlockMode(enabled) {
-            if (!toggleBtn || !panel) return; // Removed edit mode check
+            if (!toggleBtn || !panel) return;
 
             selecting = enabled;
             toggleBtn.classList.toggle('selecting', enabled);
@@ -995,12 +1006,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             console.log(SCRIPT_ID, "Selection mode:", enabled ? "ON" : "OFF");
         }
 
-        // Removed toggleEditPositionMode function
 
         console.log(SCRIPT_ID, 'Attaching event listeners...');
 
         toggleBtn.addEventListener('click', () => {
-            setBlockMode(!selecting); // Simple toggle, no edit mode check needed
+            setBlockMode(!selecting);
         });
 
         copyBtn.addEventListener('click', () => {
@@ -1122,7 +1132,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                  console.log('[settingsClose] Restoring main panel');
                  setPanelVisibility(panel, true);
              }
-             // No need to check isEditingTogglePosition
         });
 
         toggleSiteBtn.addEventListener('click', async () => {
@@ -1157,7 +1166,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             await saveSettings();
         });
 
-        // Corner button listeners
         const updateCornerButtons = (activeCorner) => {
             cornerButtons.forEach(btn => {
                 btn.classList.toggle('active', btn.dataset.corner === activeCorner);
@@ -1177,7 +1185,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             });
         });
 
-        // Initialize corner button active state
         updateCornerButtons(settings.toggleBtnCorner);
 
 
@@ -1304,9 +1311,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
         });
 
          document.addEventListener('touchstart', e => {
-             if (!selecting) return; // Only active when selecting
+             if (!selecting) return;
 
-             // Ignore touches starting on any UI element
              if (e.target.closest('.mobile-block-ui')) {
                  initialTouchedElement = null;
                  return;
@@ -1328,7 +1334,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
          document.addEventListener('touchmove', e => {
              if (!selecting || touchMoved || !e.touches[0]) return;
 
-              // Ignore moves starting on UI (shouldn't happen if start is ignored)
               if (e.target.closest('.mobile-block-ui')) return;
 
 
@@ -1349,12 +1354,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
              const touchEndTarget = e.target;
 
-             // Ignore touches ending on UI buttons or the toggle button itself
              if (touchEndTarget.closest('.mobile-block-ui .mb-btn') || touchEndTarget === toggleBtn || toggleBtn.contains(touchEndTarget)) {
-                 touchMoved = false; // Reset move flag but allow click
+                 touchMoved = false;
                  return;
              }
-              // Ignore touches ending on panel backgrounds etc.
              if (touchEndTarget.closest('.mobile-block-ui')) {
                  touchMoved = false;
                  return;
@@ -1370,10 +1373,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                  }
              } else {
                  touchMoved = false;
-                 return; // It was a drag on the page
+                 return;
              }
 
-             // Process tap for selection
              const touch = e.changedTouches[0];
              if (!touch) return;
 
@@ -1428,7 +1430,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             }
         });
 
-        function makePanelDraggable(el) { // Renamed for clarity
+        function makePanelDraggable(el) {
             if (!el) return;
             let startX, startY, elementStartX, elementStartY;
             let dragging = false;
@@ -1490,7 +1492,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 el.style.top = `${newY}px`;
                 el.style.right = 'auto';
                 el.style.bottom = 'auto';
-                el.style.transform = ''; // Use left/top for panels
+                el.style.transform = '';
             };
 
             const handleTouchEnd = async (e) => {
@@ -1500,10 +1502,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 el.style.cursor = 'grab';
 
                 if (movedSinceStart) {
-                    // No need to save panel positions currently
-                    try { /* Optional event handling */ } catch {}
-                } else {
-                    // Click/Tap occurred
+                    el.dataset.wasDragged = 'true';
                 }
                 movedSinceStart = false;
             };
@@ -1514,11 +1513,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             el.addEventListener('touchcancel', handleTouchEnd, { passive: false });
         }
 
-        // Apply dragging only to panels
         makePanelDraggable(panel);
         makePanelDraggable(settingsPanel);
         makePanelDraggable(listPanel);
-        // Do NOT make toggleBtn draggable
 
         console.log(SCRIPT_ID, 'Initialization complete.');
     }
