@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플 with Gemini
-// @version      1.2.4
+// @version      1.2.5
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      MIT
@@ -1436,83 +1436,61 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             let dragging = false;
             let movedSinceStart = false;
             const dragThreshold = 5;
-
-            const handleTouchStart = (e) => {
-                let interactiveTarget = e.target.closest('button, input[type="range"], input[type="file"], select, textarea, .blocklist-item, #blocklist-container, #blocker-info');
-                if (interactiveTarget && el.contains(interactiveTarget)) {
-                    if (interactiveTarget.id === 'blocklist-container' || interactiveTarget.id === 'blocker-info') {
-                        if (interactiveTarget.scrollHeight > interactiveTarget.clientHeight) {
-                            dragging = false; return;
-                        }
-                    } else {
-                        dragging = false; return;
-                    }
-                }
-
-                if (e.touches.length > 1) { dragging = false; return; }
-
+            el.addEventListener('touchstart', (e) => {
+                const ignore = e.target.closest('button, input, select, textarea, .blocklist-item, .mb-slider, #blocker-info, #blocklist-container');
+                if (ignore && el.contains(ignore)) return;
+                if (e.touches.length > 1) return;
                 dragging = true;
                 movedSinceStart = false;
-
+                
                 const touch = e.touches[0];
                 startX = touch.clientX;
                 startY = touch.clientY;
+                
                 const rect = el.getBoundingClientRect();
+                
+                el.style.transition = 'none';
+                el.style.transform = 'none';
+                el.style.left = `${rect.left}px`;
+                el.style.top = `${rect.top}px`;
+                el.style.right = 'auto';
+                el.style.bottom = 'auto';
+                
                 elementStartX = rect.left;
                 elementStartY = rect.top;
-
-                el.style.transition = 'none';
                 el.style.cursor = 'grabbing';
-            };
-
-            const handleTouchMove = (e) => {
+            }, { passive: true });
+            el.addEventListener('touchmove', (e) => {
                 if (!dragging || e.touches.length > 1) return;
-
                 const touch = e.touches[0];
                 const dx = touch.clientX - startX;
                 const dy = touch.clientY - startY;
-
-                if (!movedSinceStart) {
-                    if (Math.sqrt(dx * dx + dy * dy) > dragThreshold) {
-                        movedSinceStart = true;
-                        try { e.preventDefault(); } catch {}
-                    } else { return; }
-                } else { try { e.preventDefault(); } catch {} }
-
-                let newX = elementStartX + dx;
-                let newY = elementStartY + dy;
-                const elWidth = el.offsetWidth;
-                const elHeight = el.offsetHeight;
-                const parentWidth = window.innerWidth;
-                const parentHeight = window.innerHeight;
-                newX = Math.max(0, Math.min(newX, parentWidth - elWidth));
-                newY = Math.max(0, Math.min(newY, parentHeight - elHeight));
-
-                el.style.left = `${newX}px`;
-                el.style.top = `${newY}px`;
-                el.style.right = 'auto';
-                el.style.bottom = 'auto';
-                el.style.transform = '';
-            };
-
-            const handleTouchEnd = async (e) => {
-                if (!dragging) return;
-                dragging = false;
-                el.style.transition = '';
-                el.style.cursor = 'grab';
-
+                
+                if (!movedSinceStart && Math.sqrt(dx * dx + dy * dy) > dragThreshold) {
+                    movedSinceStart = true;
+                }
                 if (movedSinceStart) {
+                    e.preventDefault();
+                    const newX = Math.max(0, Math.min(elementStartX + dx, window.innerWidth - el.offsetWidth));
+                    const newY = Math.max(0, Math.min(elementStartY + dy, window.innerHeight - el.offsetHeight));
+                    el.style.left = `${newX}px`;
+                    el.style.top = `${newY}px`;
+                }
+            }, { passive: false });
+            el.addEventListener('touchend', () => {
+                if (dragging && movedSinceStart) {
                     el.dataset.wasDragged = 'true';
                 }
+                dragging = false;
                 movedSinceStart = false;
-            };
-
-            el.addEventListener('touchstart', handleTouchStart, { passive: true });
-            el.addEventListener('touchmove', handleTouchMove, { passive: false });
-            el.addEventListener('touchend', handleTouchEnd, { passive: false });
-            el.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+                el.style.cursor = 'grab';
+            });
+            el.addEventListener('touchcancel', () => {
+                dragging = false;
+                movedSinceStart = false;
+                el.style.cursor = 'grab';
+            });
         }
-
         makePanelDraggable(panel);
         makePanelDraggable(settingsPanel);
         makePanelDraggable(listPanel);
