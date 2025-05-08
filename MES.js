@@ -1448,8 +1448,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 startY = touch.clientY;
                 
                 const rect = el.getBoundingClientRect();
-                const scrollLeft = window.scrollX || document.documentElement.scrollLeft;
-                const scrollTop = window.scrollY || document.documentElement.scrollTop;
+                
                 el.style.transition = 'none';
                 el.style.transform = 'none';
                 el.style.left = `${rect.left}px`;
