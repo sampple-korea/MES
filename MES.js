@@ -15,7 +15,7 @@
 
 (async function() {
     'use strict';
-    const SCRIPT_ID = "[MES v1.2.3 M3]";
+    const SCRIPT_ID = "[MES v1.2.4 M3]";
     const ADGUARD_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/AdGuard.svg/500px-AdGuard.svg.png';
 
     const STRINGS = {
