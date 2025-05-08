@@ -1452,14 +1452,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 const scrollTop = window.scrollY || document.documentElement.scrollTop;
                 el.style.transition = 'none';
                 el.style.transform = 'none';
-                el.style.left = `${rect.left + scrollLeft}px`;
-                el.style.top = `${rect.top + scrollTop}px`;
+                el.style.left = `${rect.left}px`;
+                el.style.top = `${rect.top}px`;
                 el.style.right = 'auto';
                 el.style.bottom = 'auto';
                 
-                elementStartX = rect.left + scrollLeft;
-                elementStartY = rect.top + scrollTop;
-                
+                elementStartX = rect.left;
+                elementStartY = rect.top;
                 el.style.cursor = 'grabbing';
             }, { passive: true });
             el.addEventListener('touchmove', (e) => {
