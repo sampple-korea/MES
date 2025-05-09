@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플 with Gemini
-// @version      1.2.6
+// @version      1.2.5
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      MIT
@@ -15,7 +15,7 @@
 
 (async function() {
 	'use strict';
-	const SCRIPT_ID = "[MES v1.2.6 M3]";
+	const SCRIPT_ID = "[MES v1.2.4 M3]";
 	const ADGUARD_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/AdGuard.svg/500px-AdGuard.svg.png';
 
 	const STRINGS = {
@@ -403,6 +403,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		settingsPanel.className = 'mobile-block-ui';
 		settingsPanel.innerHTML = `
             <h3 class="mb-panel-title">${STRINGS.settingsTitle}</h3>
+            <div class="scrollable-container" style="max-height: 65vh; overflow-y: auto; padding-right: 4px;">
             <div class="settings-item">
                 <label><span class="settings-label-text">${STRINGS.includeSiteNameLabel}</span>
                     <button id="settings-toggle-site" class="mb-btn ${settings.includeSiteName ? 'active' : ''}">${settings.includeSiteName ? STRINGS.on : STRINGS.off}</button>
@@ -452,6 +453,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                  <button id="settings-backup" class="mb-btn outline">${STRINGS.backupLabel}</button>
                  <button id="settings-restore" class="mb-btn outline">${STRINGS.restoreLabel}</button>
                  <input type="file" id="settings-restore-input" accept=".json">
+            </div>
             </div>
             <button id="settings-close" class="mb-btn surface" style="width: 100%; margin-top: 20px;">${STRINGS.close}</button>`;
 		document.body.appendChild(settingsPanel);
@@ -601,8 +603,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				});
 				if (elements.length > 0) appliedCount++;
 
-			} catch (e) {
-			}
+			} catch (e) {}
 		});
 
 		if (count > 0) console.log(SCRIPT_ID, `Applied ${appliedCount} rules, hid ${count} new elements.`);
@@ -1488,18 +1489,17 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			let dragging = false;
 			let movedSinceStart = false;
 			const dragThreshold = 5;
+
 			el.addEventListener('touchstart', (e) => {
-				const ignore = e.target.closest('button, input, select, textarea, .blocklist-item, .mb-slider, #blocker-info, #blocklist-container');
-				if (ignore && el.contains(ignore)) return;
-
-				let interactiveTarget = e.target.closest(
-					'button, input[type="range"], input[type="file"], select, textarea, .blocklist-item, #blocklist-container, #blocker-info, #mobile-settings-panel'
-				);
-
-				if (interactiveTarget && el.contains(interactiveTarget)) {
+				// 스크롤 허용 영역 체크
+				const isInsideScrollable = e.target.closest('.scrollable-container');
+				if (isInsideScrollable) {
 					dragging = false;
 					return;
 				}
+
+				const ignore = e.target.closest('button, input, select, textarea, .blocklist-item, .mb-slider, #blocker-info, #blocklist-container');
+				if (ignore && el.contains(ignore)) return;
 
 				if (e.touches.length > 1) return;
 				dragging = true;
@@ -1524,6 +1524,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}, {
 				passive: true
 			});
+
 			el.addEventListener('touchmove', (e) => {
 				if (!dragging || e.touches.length > 1) return;
 				const touch = e.touches[0];
@@ -1543,6 +1544,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}, {
 				passive: false
 			});
+
 			el.addEventListener('touchend', () => {
 				if (dragging && movedSinceStart) {
 					el.dataset.wasDragged = 'true';
@@ -1551,12 +1553,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				movedSinceStart = false;
 				el.style.cursor = 'grab';
 			});
+
 			el.addEventListener('touchcancel', () => {
 				dragging = false;
 				movedSinceStart = false;
 				el.style.cursor = 'grab';
 			});
 		}
+
 		makePanelDraggable(panel);
 		makePanelDraggable(settingsPanel);
 		makePanelDraggable(listPanel);
