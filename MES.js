@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
-// @author       삼플 with Gemini
-// @version      1.2.6
+// @author       삼플
+// @version      1.2.8
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      MIT
@@ -15,7 +15,7 @@
 
 (async function() {
 	'use strict';
-	const SCRIPT_ID = "[MES v1.2.6 M3]";
+	const SCRIPT_ID = "[MES v1.2.8 M3]";
 	const ADGUARD_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/AdGuard.svg/500px-AdGuard.svg.png';
 
 	const STRINGS = {
@@ -222,6 +222,21 @@
     --md-sys-typescale-title-medium-font-size: 18px;
 }
 
+.scrollable-container {
+    position: relative;
+    overflow-y: auto;
+    max-height: 70vh;
+    padding: 20px;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
+    
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+.scrollable-container::-webkit-scrollbar {
+    display: none;
+}
+
 .mobile-block-ui { z-index: 2147483646 !important; touch-action: manipulation !important; font-family: var(--md-sys-typescale-body-large-font-family); box-sizing: border-box; position: fixed !important; visibility: visible !important; color: var(--md-sys-color-on-surface); -webkit-tap-highlight-color: transparent !important; }
 
 #mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel {
@@ -403,7 +418,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		settingsPanel.className = 'mobile-block-ui';
 		settingsPanel.innerHTML = `
             <h3 class="mb-panel-title">${STRINGS.settingsTitle}</h3>
-            <div class="scrollable-container" style="max-height: 65vh; overflow-y: auto; padding-right: 4px;">
+            <div class="scrollable-container" style="max-height: 65vh; overflow-y: auto;">
             <div class="settings-item">
                 <label><span class="settings-label-text">${STRINGS.includeSiteNameLabel}</span>
                     <button id="settings-toggle-site" class="mb-btn ${settings.includeSiteName ? 'active' : ''}">${settings.includeSiteName ? STRINGS.on : STRINGS.off}</button>
@@ -1008,6 +1023,35 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 		}
 
+		function applyGradientMask(container) {
+			if (!container) return;
+			const updateMask = () => {
+				const {
+					scrollTop,
+					scrollHeight,
+					clientHeight
+				} = container;
+				const isAtTop = scrollTop <= 0;
+				const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1;
+				if (isAtTop && isAtBottom) {
+					container.style.webkitMaskImage = 'none';
+					container.style.maskImage = 'none';
+				} else if (isAtTop) {
+					container.style.webkitMaskImage = `linear-gradient(to bottom, black 0%, black 90%, transparent 100%)`;
+					container.style.maskImage = container.style.webkitMaskImage;
+				} else if (isAtBottom) {
+					container.style.webkitMaskImage = `linear-gradient(to bottom, transparent 0%, black 10%, black 100%)`;
+					container.style.maskImage = container.style.webkitMaskImage;
+				} else {
+					container.style.webkitMaskImage = `linear-gradient(to bottom, transparent 0%, black 10%, black 90%, transparent 100%)`;
+					container.style.maskImage = container.style.webkitMaskImage;
+				}
+			};
+
+			container.addEventListener('scroll', updateMask);
+			requestAnimationFrame(updateMask);
+		}
+
 		function setBlockMode(enabled) {
 			if (!toggleBtn || !panel) return;
 
@@ -1491,7 +1535,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			const dragThreshold = 5;
 
 			el.addEventListener('touchstart', (e) => {
-				// 스크롤 허용 영역 체크
 				const isInsideScrollable = e.target.closest('.scrollable-container');
 				if (isInsideScrollable) {
 					dragging = false;
@@ -1564,6 +1607,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		makePanelDraggable(panel);
 		makePanelDraggable(settingsPanel);
 		makePanelDraggable(listPanel);
+
+		const settingsScrollable = settingsPanel.querySelector('.scrollable-container');
+		if (settingsScrollable) applyGradientMask(settingsScrollable);
 
 		console.log(SCRIPT_ID, 'Initialization complete.');
 	}
