@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플 with Gemini
-// @version      1.2.5
+// @version      1.2.6
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      MIT
@@ -15,7 +15,7 @@
 
 (async function() {
 	'use strict';
-	const SCRIPT_ID = "[MES v1.2.4 M3]";
+	const SCRIPT_ID = "[MES v1.2.6 M3]";
 	const ADGUARD_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/AdGuard.svg/500px-AdGuard.svg.png';
 
 	const STRINGS = {
