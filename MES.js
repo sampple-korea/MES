@@ -783,6 +783,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	}
 
 	function initRefsAndEvents() {
+		const scrollable = settingsPanel.querySelector('.scrollable-container');
 		const infoLabel = panel.querySelector('#blocker-info-label');
 		const info = panel.querySelector('#blocker-info');
 		const slider = panel.querySelector('#blocker-slider');
@@ -814,6 +815,22 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		let isPreviewHidden = false;
 		let previewedElement = null;
 
+		let isScrollingSettings = false;
+		let scrollStartY = 0;
+		if (scrollable) {
+			scrollable.addEventListener('touchstart', e => {
+				scrollStartY = e.touches[0].clientY;
+				isScrollingSettings = false;
+			}, {passive: true});
+			scrollable.addEventListener('touchmove', e => {
+				if (Math.abs(e.touches[0].clientY - scrollStartY) > 5){
+					isScrollingSettings = true;
+				}
+			}, {passive: true});
+			scrollable.addEventListener('touchend', () => {
+				setTimeout(() => isScrollingSettings = false, 0);
+			});
+		}
 		function removeSelectionHighlight() {
 			if (selectedEl) {
 				selectedEl.classList.remove('selected-element');
@@ -1286,6 +1303,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		};
 
 		panelOpacitySlider.addEventListener('input', e => {
+			if (isScrollingSettings) return;
 			const newValue = parseFloat(e.target.value);
 			settings.panelOpacity = newValue;
 			panelOpacityValue.textContent = newValue.toFixed(2);
@@ -1297,6 +1315,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 
 		toggleSizeSlider.addEventListener('input', e => {
+			if (isScrollingSettings) return;
 			const newValue = parseFloat(e.target.value);
 			settings.toggleSizeScale = newValue;
 			toggleSizeValue.textContent = newValue.toFixed(1) + 'x';
@@ -1309,6 +1328,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 
 		toggleOpacitySlider.addEventListener('input', e => {
+			if (isScrollingSettings) return;
 			const newValue = parseFloat(e.target.value);
 			settings.toggleOpacity = newValue;
 			toggleOpacityValue.textContent = newValue.toFixed(2);
