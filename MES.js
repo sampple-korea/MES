@@ -74,6 +74,12 @@
 		launcherModeLabel: '열기 방식',
 		launcherButton: '버튼',
 		launcherGesture: '제스처',
+		gestureFingerCountLabel: '손가락',
+		gestureTapCountLabel: '탭 횟수',
+		gestureTwoFingers: '두 손가락',
+		gestureThreeFingers: '세 손가락',
+		gestureTwoTaps: '두 번',
+		gestureThreeTaps: '세 번',
 		minimizePanel: '패널 축소',
 		expandPanel: '패널 펼치기',
 		hideStrategyLabel: '숨김 방식',
@@ -158,6 +164,11 @@
 		restoreSuccessDeduped: (count) => `규칙 복원 완료. 중복 ${count}개 제거됨`,
 		restoreErrorInvalidFile: '잘못된 파일 형식 또는 내용입니다.',
 		restoreErrorGeneral: '규칙 복원 실패',
+		legacyImportTitle: '기존 필터 감지됨',
+		legacyImportSummary: (total, fresh) => `전체 사이트 필터 ${total}개 · 새 규칙 ${fresh}개`,
+		legacyImportButton: '가져오기',
+		legacyImportNone: '가져올 새 규칙이 없습니다.',
+		legacyImportSuccess: (count) => `기존 필터 ${count}개 가져옴`,
 		blockingApplied: (count) => `${count}개의 규칙 적용됨`,
 		blockingApplyError: '규칙 적용 중 오류 발생',
 		tempBlockingOn: '모든 규칙 임시 비활성화됨',
@@ -179,6 +190,8 @@
 		compactPickerMode: true,
 		hideToggleButton: false,
 		twoFingerGesture: false,
+		gestureFingerCount: 2,
+		gestureTapCount: 2,
 		hideStrategy: 'stylesheet',
 		toggleBtnCorner: 'bottom-right'
 	};
@@ -264,6 +277,14 @@
 		settings.hideToggleButton = typeof settings.hideToggleButton === 'boolean' ? settings.hideToggleButton : DEFAULT_SETTINGS.hideToggleButton;
 		settings.twoFingerGesture = typeof settings.twoFingerGesture === 'boolean' ? settings.twoFingerGesture : DEFAULT_SETTINGS.twoFingerGesture;
 		settings.twoFingerGesture = settings.hideToggleButton ? true : false;
+		settings.gestureFingerCount = parseInt(settings.gestureFingerCount, 10);
+		if (![2, 3].includes(settings.gestureFingerCount)) {
+			settings.gestureFingerCount = DEFAULT_SETTINGS.gestureFingerCount;
+		}
+		settings.gestureTapCount = parseInt(settings.gestureTapCount, 10);
+		if (![2, 3].includes(settings.gestureTapCount)) {
+			settings.gestureTapCount = DEFAULT_SETTINGS.gestureTapCount;
+		}
 		const validHideStrategies = ['stylesheet', 'display', 'visibility', 'opacity'];
 		if (!validHideStrategies.includes(settings.hideStrategy)) {
 			settings.hideStrategy = DEFAULT_SETTINGS.hideStrategy;
@@ -309,6 +330,7 @@
 	const STYLE_BLOCK_OWNER_ATTR = 'data-mes-style-owner';
 	const STYLE_BLOCK_OWNER_VALUE = 'blocking';
 	const UI_STYLE_ID = 'mes-ui-style';
+	const LEGACY_FILTER_STORAGE_KEY = ['pi', 'cky_blocked_rules'].join('');
 
 	function escapeAttributeValue(value) {
 		return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim();
@@ -648,6 +670,41 @@
 		};
 	}
 
+	function parseStoredObject(value) {
+		if (!value) return {};
+		if (typeof value === 'string') {
+			try {
+				const parsed = JSON.parse(value);
+				return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+			} catch (e) {
+				return {};
+			}
+		}
+		return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+	}
+
+	async function getLegacyImportCandidates() {
+		const store = parseStoredObject(await gmGetValue(LEGACY_FILTER_STORAGE_KEY, null));
+		const sourceRules = [];
+		Object.entries(store).forEach(([hostname, selectors]) => {
+			const cleanHost = typeof hostname === 'string' ? hostname.trim() : '';
+			if (!cleanHost || /[\n\r#{}]/.test(cleanHost) || !Array.isArray(selectors)) return;
+			selectors
+				.map(selector => typeof selector === 'string' ? selector.trim() : '')
+				.filter(selector => selector && !/[\n\r{}]/.test(selector))
+				.forEach(selector => sourceRules.push(`${cleanHost}##${selector}`));
+		});
+		const normalized = normalizeRulesForStorage(sourceRules);
+		const existingRules = new Set(await loadBlockedSelectors());
+		const freshRules = normalized.rules.filter(rule => !existingRules.has(rule));
+		return {
+			totalCount: normalized.rules.length,
+			freshRules,
+			duplicateCount: normalized.rules.length - freshRules.length,
+			invalidCount: normalized.invalidCount
+		};
+	}
+
 	function getRuleTextForSelector(selector) {
 		if (!selector) return '';
 		return settings.includeSiteName ? `${location.hostname}##${selector}` : `##${selector}`;
@@ -938,8 +995,8 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
     display: none;
     opacity: 0;
     backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden;
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease-out;
-    will-change: transform, opacity;
+    transition: transform 0.28s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease-out, width 0.22s cubic-bezier(0.22, 1, 0.36, 1), max-width 0.22s cubic-bezier(0.22, 1, 0.36, 1), padding 0.22s cubic-bezier(0.22, 1, 0.36, 1), border-radius 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform, opacity, width;
     cursor: grab;
 }
 
@@ -1019,7 +1076,7 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 #mobile-block-toggleBtn.selecting .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 3h2v5h-2V3Zm0 13h2v5h-2v-5ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-4-2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 3h2v5h-2V3Zm0 13h2v5h-2v-5ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-4-2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>'); }
 #mobile-block-toggleBtn .toggle-icon-adguard { background-image: url('${ALT_TOGGLE_LOGO_URL}'); background-size: contain; background-repeat: no-repeat; background-position: center; background-color: transparent !important; mask-image: none; -webkit-mask-image: none; width: 60%; height: 60%; }
 
-.mb-btn { padding: 7px 12px; border: 0.5px solid transparent; border-radius: 10px !important; font-size: var(--md-sys-typescale-label-large-font-size); font-weight: 600; cursor: pointer; transition: background-color 0.16s ease, transform 0.1s ease, box-shadow 0.16s ease, border-color 0.16s ease; text-align: center; box-shadow: none; min-width: 52px; min-height: 34px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 1 !important; -webkit-tap-highlight-color: transparent !important; line-height: 1.35; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0; }
+.mb-btn { padding: 7px 12px; border: 0.5px solid transparent; border-radius: 10px !important; font-size: var(--md-sys-typescale-label-large-font-size); font-weight: 600; cursor: pointer; transition: background-color 0.18s ease, transform 0.12s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.18s ease, border-color 0.18s ease, color 0.18s ease; text-align: center; box-shadow: none; min-width: 0; min-height: 34px; overflow: hidden; white-space: normal; overflow-wrap: anywhere; text-overflow: clip; opacity: 1 !important; -webkit-tap-highlight-color: transparent !important; line-height: 1.25; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0; }
 .mb-btn:hover { box-shadow: 0 1px 5px rgba(0,0,0,0.08); }
 .mb-btn:active { transform: scale(0.97); box-shadow: none; }
 .mb-btn:disabled { opacity: 0.36 !important; cursor: default; pointer-events: none; box-shadow: none !important; }
@@ -1037,7 +1094,7 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 .mb-btn.outline:hover { background-color: rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.08); }
 .mb-btn.outline:active { background-color: rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.12); }
 .mes-icon { display: inline-block; width: 14px; height: 14px; flex: 0 0 auto; background-color: currentColor; opacity: 0.78; mask-size: contain; mask-position: center; mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; }
-.btn-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.btn-label { min-width: 0; overflow: visible; text-overflow: clip; white-space: normal; line-height: 1.18; }
 .icon-minimize { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 11h14v2H5v-2Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 11h14v2H5v-2Z"/></svg>'); }
 .icon-expand { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 9V5h4v2H8v2H6Zm8-4h4v4h-2V7h-2V5ZM8 15v2h2v2H6v-4h2Zm8 2v-2h2v4h-4v-2h2Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 9V5h4v2H8v2H6Zm8-4h4v4h-2V7h-2V5ZM8 15v2h2v2H6v-4h2Zm8 2v-2h2v4h-4v-2h2Z"/></svg>'); }
 .icon-preview { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 5c5 0 8 4.5 9 7-1 2.5-4 7-9 7s-8-4.5-9-7c1-2.5 4-7 9-7Zm0 3.5A3.5 3.5 0 1 0 12 15a3.5 3.5 0 0 0 0-7Zm0 2A1.5 1.5 0 1 1 12 13a1.5 1.5 0 0 1 0-3Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 5c5 0 8 4.5 9 7-1 2.5-4 7-9 7s-8-4.5-9-7c1-2.5 4-7 9-7Zm0 3.5A3.5 3.5 0 1 0 12 15a3.5 3.5 0 0 0 0-7Zm0 2A1.5 1.5 0 1 1 12 13a1.5 1.5 0 0 1 0-3Z"/></svg>'); }
@@ -1053,8 +1110,8 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 #mobile-block-panel:not(.compact-picker) #blocker-compact-summary { opacity: 0; }
 .picker-compact-btn { width: 32px; min-width: 32px; height: 30px; min-height: 30px; padding: 0 !important; border-radius: 999px !important; background-color: rgba(118,118,128,0.12); color: var(--md-sys-color-on-surface-variant); }
 .picker-compact-btn .mes-icon { width: 15px; height: 15px; opacity: 0.72; }
-.primary-action-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
-.primary-action-grid .mb-btn { gap: 4px; min-height: 31px; padding: 6px 8px; font-size: var(--md-sys-typescale-label-small-font-size); }
+.primary-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.primary-action-grid .mb-btn { gap: 5px; min-height: 32px; padding: 6px 8px; font-size: var(--md-sys-typescale-label-small-font-size); }
 .secondary-action-grid { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 0.5px solid rgba(60,60,67,0.12); }
 .secondary-action-grid.visible { display: grid; }
 .secondary-action-grid .mb-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-medium-font-size); }
@@ -1114,6 +1171,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .launcher-mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
 .launcher-mode-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; background: transparent; color: var(--md-sys-color-on-surface-variant); }
 .launcher-mode-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
+.gesture-detail-panel { display: none; margin-top: 8px; gap: 6px; }
+.gesture-detail-panel.visible { display: grid; }
+.gesture-detail-row { display: grid; grid-template-columns: minmax(58px, 0.54fr) minmax(0, 1fr); align-items: center; gap: 8px; }
+.gesture-detail-label { font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); font-weight: 600; white-space: nowrap; }
+.gesture-option-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); min-width: 0; }
+.gesture-option-btn { padding: 6px 6px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; background-color: transparent; color: var(--md-sys-color-on-surface-variant); }
+.gesture-option-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
 .corner-selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
 .corner-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; }
 .corner-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
@@ -1122,6 +1186,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .hide-strategy-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; }
 .hide-strategy-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
 .hide-strategy-btn:not(.active) { background-color: transparent; color: var(--md-sys-color-on-surface-variant); }
+.legacy-import-item[hidden] { display: none !important; }
+.legacy-import-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px; border-radius: 12px; background: rgba(0,122,255,0.07); border: 0.5px solid rgba(0,122,255,0.12); }
+.legacy-import-title { font-size: var(--md-sys-typescale-label-large-font-size); font-weight: 700; color: var(--md-sys-color-on-surface); }
+.legacy-import-summary { margin-top: 2px; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); }
+.legacy-import-card .mb-btn { min-height: 30px; padding: 6px 10px; }
+
+@media (prefers-reduced-motion: reduce) {
+    #mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel,
+    #mobile-block-toggleBtn, .mb-btn, .mes-switch .switch-knob {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
 
 #blocklist-container { max-height: calc(70vh - 135px); overflow-y: auto; margin: 12px 0; padding-right: 4px; display: flex; flex-direction: column; gap: 8px; }
 #blocklist-summary { color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: center; margin-top: -4px; margin-bottom: 8px; }
@@ -1394,6 +1471,22 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                      <button data-launcher-mode="button" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherButton}</button>
                      <button data-launcher-mode="gesture" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherGesture}</button>
                  </div>
+                 <div id="gesture-detail-settings" class="gesture-detail-panel ${settings.hideToggleButton ? 'visible' : ''}">
+                     <div class="gesture-detail-row">
+                         <span class="gesture-detail-label">${STRINGS.gestureFingerCountLabel}</span>
+                         <div class="gesture-option-grid" role="radiogroup" aria-label="${STRINGS.gestureFingerCountLabel}">
+                             <button data-gesture-fingers="2" class="mb-btn gesture-option-btn gesture-finger-btn" role="radio">${STRINGS.gestureTwoFingers}</button>
+                             <button data-gesture-fingers="3" class="mb-btn gesture-option-btn gesture-finger-btn" role="radio">${STRINGS.gestureThreeFingers}</button>
+                         </div>
+                     </div>
+                     <div class="gesture-detail-row">
+                         <span class="gesture-detail-label">${STRINGS.gestureTapCountLabel}</span>
+                         <div class="gesture-option-grid" role="radiogroup" aria-label="${STRINGS.gestureTapCountLabel}">
+                             <button data-gesture-taps="2" class="mb-btn gesture-option-btn gesture-tap-btn" role="radio">${STRINGS.gestureTwoTaps}</button>
+                             <button data-gesture-taps="3" class="mb-btn gesture-option-btn gesture-tap-btn" role="radio">${STRINGS.gestureThreeTaps}</button>
+                         </div>
+                     </div>
+                 </div>
             </div>
             <div class="settings-section-title">UI</div>
             <div class="settings-item">
@@ -1440,6 +1533,15 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                  <button id="settings-backup" class="mb-btn outline">${STRINGS.backupLabel}</button>
                  <button id="settings-restore" class="mb-btn outline">${STRINGS.restoreLabel}</button>
                  <input type="file" id="settings-restore-input" accept=".json">
+            </div>
+            <div id="settings-legacy-import-item" class="settings-item legacy-import-item" hidden>
+                <div class="legacy-import-card">
+                    <div>
+                        <div class="legacy-import-title">${STRINGS.legacyImportTitle}</div>
+                        <div id="legacy-import-summary" class="legacy-import-summary"></div>
+                    </div>
+                    <button id="settings-legacy-import" class="mb-btn outline">${STRINGS.legacyImportButton}</button>
+                </div>
             </div>
             </div>
             <button id="settings-close" class="mb-btn surface" style="width: 100%; margin-top: 20px;">${STRINGS.close}</button>
@@ -2178,6 +2280,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		const autoCloseBtn = settingsPanel.querySelector('#settings-auto-close');
 		const compactPickerBtn = settingsPanel.querySelector('#settings-compact-picker');
 		const launcherModeButtons = settingsPanel.querySelectorAll('.launcher-mode-btn');
+		const gestureDetailSettings = settingsPanel.querySelector('#gesture-detail-settings');
+		const gestureFingerButtons = settingsPanel.querySelectorAll('.gesture-finger-btn');
+		const gestureTapButtons = settingsPanel.querySelectorAll('.gesture-tap-btn');
 		const panelOpacitySlider = settingsPanel.querySelector('#settings-panel-opacity');
 		const panelOpacityValue = settingsPanel.querySelector('#opacity-value');
 		const toggleSizeSlider = settingsPanel.querySelector('#settings-toggle-size');
@@ -2189,6 +2294,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		const backupBtn = settingsPanel.querySelector('#settings-backup');
 		const restoreBtn = settingsPanel.querySelector('#settings-restore');
 		const restoreInput = settingsPanel.querySelector('#settings-restore-input');
+		const legacyImportItem = settingsPanel.querySelector('#settings-legacy-import-item');
+		const legacyImportSummary = settingsPanel.querySelector('#legacy-import-summary');
+		const legacyImportBtn = settingsPanel.querySelector('#settings-legacy-import');
 
 		let isPreviewHidden = false;
 		let previewedElement = null;
@@ -2398,19 +2506,30 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		function setPanelVisibility(panelElement, visible) {
 			if (!panelElement) return;
 
+			const schedulePanelHide = (targetPanel) => {
+				const hideToken = `${Date.now()}-${Math.random()}`;
+				targetPanel.dataset.hideToken = hideToken;
+				const transitionEndHandler = () => {
+					if (!targetPanel.classList.contains('visible') && targetPanel.dataset.hideToken === hideToken) {
+						targetPanel.style.display = 'none';
+					}
+					targetPanel.removeEventListener('transitionend', transitionEndHandler);
+				};
+				targetPanel.addEventListener('transitionend', transitionEndHandler);
+				setTimeout(() => {
+					if (!targetPanel.classList.contains('visible') && targetPanel.dataset.hideToken === hideToken) {
+						targetPanel.style.display = 'none';
+					}
+					targetPanel.removeEventListener('transitionend', transitionEndHandler);
+				}, 350);
+			};
+
 			if (visible) {
+				delete panelElement.dataset.hideToken;
 				[panel, settingsPanel, listPanel, inspectorPanel].forEach(p => {
 					if (p && p !== panelElement && p.classList.contains('visible')) {
 						p.classList.remove('visible');
-						const transitionEndHandler = () => {
-							if (!p.classList.contains('visible')) p.style.display = 'none';
-							p.removeEventListener('transitionend', transitionEndHandler);
-						};
-						p.addEventListener('transitionend', transitionEndHandler);
-						setTimeout(() => {
-							if (!p.classList.contains('visible')) p.style.display = 'none';
-							p.removeEventListener('transitionend', transitionEndHandler);
-						}, 350);
+						schedulePanelHide(p);
 					}
 				});
 
@@ -2424,15 +2543,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			} else {
 				if (activePanel === panelElement) activePanel = null;
 				panelElement.classList.remove('visible');
-				const transitionEndHandler = () => {
-					if (!panelElement.classList.contains('visible')) panelElement.style.display = 'none';
-					panelElement.removeEventListener('transitionend', transitionEndHandler);
-				};
-				panelElement.addEventListener('transitionend', transitionEndHandler);
-				setTimeout(() => {
-					if (!panelElement.classList.contains('visible')) panelElement.style.display = 'none';
-					panelElement.removeEventListener('transitionend', transitionEndHandler);
-				}, 350);
+				schedulePanelHide(panelElement);
 			}
 		}
 
@@ -2973,7 +3084,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (enabled) {
 				updatePickerDocking();
 				setPanelVisibility(panel, true);
-				setPickerCompact(!!settings.compactPickerMode);
+				setPickerCompact(false);
 				if (selectedEl) {
 					applySelectionHighlight(selectedEl);
 				}
@@ -3489,6 +3600,33 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (toggleBtn) {
 				toggleBtn.classList.toggle('hidden-toggle', settings.hideToggleButton);
 			}
+			updateGestureDetailControls();
+		}
+
+		function updateGestureDetailControls() {
+			gestureDetailSettings?.classList.toggle('visible', settings.hideToggleButton);
+			gestureFingerButtons.forEach(button => {
+				const active = Number(button.dataset.gestureFingers) === settings.gestureFingerCount;
+				button.classList.toggle('active', active);
+				button.setAttribute('aria-checked', active ? 'true' : 'false');
+				button.setAttribute('aria-pressed', active ? 'true' : 'false');
+			});
+			gestureTapButtons.forEach(button => {
+				const active = Number(button.dataset.gestureTaps) === settings.gestureTapCount;
+				button.classList.toggle('active', active);
+				button.setAttribute('aria-checked', active ? 'true' : 'false');
+				button.setAttribute('aria-pressed', active ? 'true' : 'false');
+			});
+		}
+
+		async function refreshLegacyImportControls() {
+			if (!legacyImportItem || !legacyImportSummary || !legacyImportBtn) return null;
+			const candidates = await getLegacyImportCandidates();
+			const detected = candidates.totalCount > 0;
+			legacyImportItem.hidden = !detected;
+			legacyImportSummary.textContent = detected ? STRINGS.legacyImportSummary(candidates.totalCount, candidates.freshRules.length) : '';
+			legacyImportBtn.disabled = !candidates.freshRules.length;
+			return candidates;
 		}
 
 		toggleSiteBtn.addEventListener('click', async () => {
@@ -3563,6 +3701,28 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 		updateLauncherModeButtons();
 
+		gestureFingerButtons.forEach(button => {
+			button.addEventListener('click', async () => {
+				const nextValue = Number(button.dataset.gestureFingers);
+				if (![2, 3].includes(nextValue) || settings.gestureFingerCount === nextValue) return;
+				settings.gestureFingerCount = nextValue;
+				updateGestureDetailControls();
+				await saveSettings();
+				showToast(STRINGS.settingsSaved, 'info', 1500);
+			});
+		});
+
+		gestureTapButtons.forEach(button => {
+			button.addEventListener('click', async () => {
+				const nextValue = Number(button.dataset.gestureTaps);
+				if (![2, 3].includes(nextValue) || settings.gestureTapCount === nextValue) return;
+				settings.gestureTapCount = nextValue;
+				updateGestureDetailControls();
+				await saveSettings();
+				showToast(STRINGS.settingsSaved, 'info', 1500);
+			});
+		});
+
 		const updateCornerButtons = (activeCorner) => {
 			cornerButtons.forEach(btn => {
 				btn.classList.toggle('active', btn.dataset.corner === activeCorner);
@@ -3605,6 +3765,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 
 		updateHideStrategyButtons(settings.hideStrategy);
+		refreshLegacyImportControls();
 
 
 		let saveTimeout;
@@ -3648,6 +3809,29 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				toggleBtn.style.setProperty('opacity', newValue, 'important');
 			}
 			debounceSaveSettings();
+		});
+
+		legacyImportBtn?.addEventListener('click', async () => {
+			try {
+				const candidates = await getLegacyImportCandidates();
+				if (!candidates.freshRules.length) {
+					await refreshLegacyImportControls();
+					showToast(STRINGS.legacyImportNone, 'info', 1600);
+					return;
+				}
+				const existingRules = await loadBlockedSelectors();
+				await saveBlockedSelectors([...existingRules, ...candidates.freshRules]);
+				disableAllBlocking(false);
+				await applyBlocking(false);
+				if (listPanel.classList.contains('visible')) {
+					await showList();
+				}
+				await refreshLegacyImportControls();
+				showToast(STRINGS.legacyImportSuccess(candidates.freshRules.length), 'success', 2200);
+			} catch (err) {
+				console.error(SCRIPT_ID, 'Legacy import failed:', err);
+				showToast(STRINGS.restoreErrorGeneral, 'error');
+			}
 		});
 
 		backupBtn.addEventListener('click', async () => {
@@ -3756,6 +3940,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						toggleOpacitySlider.value = settings.toggleOpacity;
 						toggleOpacityValue.textContent = settings.toggleOpacity.toFixed(2);
 						updateCornerButtons(settings.toggleBtnCorner);
+						await refreshLegacyImportControls();
 					}
 
 				} catch (err) {
@@ -3819,21 +4004,33 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			passive: true
 		});
 
-		let lastTwoFingerTapAt = 0;
+		let launcherGestureLastTapAt = 0;
+		let launcherGestureTapProgress = 0;
+		let launcherGestureSuppressUntil = 0;
 		document.addEventListener('touchstart', e => {
-			if (!settings.twoFingerGesture || e.touches.length !== 2) return;
+			const requiredFingers = settings.gestureFingerCount || 2;
+			const requiredTaps = settings.gestureTapCount || 2;
+			if (!settings.twoFingerGesture || e.touches.length !== requiredFingers) return;
 			if (e.target.closest('.mobile-block-ui')) return;
 
 			const now = Date.now();
-			if (now - lastTwoFingerTapAt <= 520) {
+			if (now - launcherGestureLastTapAt > 560) {
+				launcherGestureTapProgress = 0;
+			}
+			launcherGestureLastTapAt = now;
+			launcherGestureTapProgress += 1;
+
+			if (launcherGestureTapProgress >= requiredTaps) {
 				try {
 					e.preventDefault();
 					e.stopImmediatePropagation();
 				} catch (err) {}
-				lastTwoFingerTapAt = 0;
+				launcherGestureLastTapAt = 0;
+				launcherGestureTapProgress = 0;
+				launcherGestureSuppressUntil = now + 260;
+				touchMoved = true;
+				initialTouchedElement = null;
 				setBlockMode(!selecting);
-			} else {
-				lastTwoFingerTapAt = now;
 			}
 		}, {
 			capture: true,
@@ -3841,6 +4038,15 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 
 		document.addEventListener('touchend', e => {
+			if (Date.now() < launcherGestureSuppressUntil) {
+				try {
+					e.preventDefault();
+					e.stopImmediatePropagation();
+				} catch (err) {}
+				touchMoved = false;
+				initialTouchedElement = null;
+				return;
+			}
 			if (!selecting) return;
 
 			const touchEndTarget = e.target;
@@ -3907,10 +4113,129 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		function makePanelDraggable(el) {
 			if (!el) return;
-			let startX, startY, elementStartX, elementStartY;
+			let startX, startY, elementStartX, elementStartY, dragDeltaX, dragDeltaY, dragBounds;
 			let dragging = false;
 			let movedSinceStart = false;
 			const dragThreshold = 5;
+			const snapTransition = 'left 220ms cubic-bezier(0.22, 1, 0.36, 1), top 220ms cubic-bezier(0.22, 1, 0.36, 1), transform 220ms cubic-bezier(0.22, 1, 0.36, 1)';
+
+			function clamp(value, min, max) {
+				if (max < min) return min;
+				return Math.max(min, Math.min(value, max));
+			}
+
+			function parsePx(value) {
+				const parsed = parseFloat(value);
+				return Number.isFinite(parsed) ? parsed : 0;
+			}
+
+			function getSafeAreaInsets() {
+				const probe = document.createElement('div');
+				probe.style.cssText = 'position:fixed;top:env(safe-area-inset-top,0px);right:env(safe-area-inset-right,0px);bottom:env(safe-area-inset-bottom,0px);left:env(safe-area-inset-left,0px);width:0;height:0;visibility:hidden;pointer-events:none;';
+				document.documentElement.appendChild(probe);
+				const style = getComputedStyle(probe);
+				const insets = {
+					top: parsePx(style.top),
+					right: parsePx(style.right),
+					bottom: parsePx(style.bottom),
+					left: parsePx(style.left)
+				};
+				probe.remove();
+				return insets;
+			}
+
+			function getPanelBounds() {
+				const viewportWidth = window.innerWidth || document.documentElement.clientWidth || el.offsetWidth;
+				const viewportHeight = window.innerHeight || document.documentElement.clientHeight || el.offsetHeight;
+				const margin = viewportWidth >= 700 ? 20 : 16;
+				const safeArea = getSafeAreaInsets();
+				const width = Math.min(el.offsetWidth || el.getBoundingClientRect().width || viewportWidth, viewportWidth - margin * 2);
+				const height = Math.min(el.offsetHeight || el.getBoundingClientRect().height || viewportHeight, viewportHeight - margin * 2);
+				const minLeft = margin + safeArea.left;
+				const maxLeft = Math.max(minLeft, viewportWidth - width - margin - safeArea.right);
+				const minTop = margin + safeArea.top;
+				const maxTop = Math.max(minTop, viewportHeight - height - margin - safeArea.bottom);
+				return { viewportWidth, viewportHeight, width, height, minLeft, maxLeft, minTop, maxTop };
+			}
+
+			function getSnapCandidates() {
+				const { viewportWidth, viewportHeight, width, height, minLeft, maxLeft, minTop, maxTop } = getPanelBounds();
+				const centerLeft = clamp((viewportWidth - width) / 2, minLeft, maxLeft);
+				const centerTop = clamp((viewportHeight - height) / 2, minTop, maxTop);
+				const centerY = clamp((viewportHeight - height) / 2, minTop, maxTop);
+
+				const candidates = [
+					{ name: 'top-center', left: centerLeft, top: minTop },
+					{ name: 'bottom-center', left: centerLeft, top: maxTop }
+				];
+
+				if (el !== panel) {
+					candidates.push(
+						{ name: 'center', left: centerLeft, top: centerTop },
+						{ name: 'left-center', left: minLeft, top: centerY },
+						{ name: 'right-center', left: maxLeft, top: centerY }
+					);
+				}
+
+				return candidates;
+			}
+
+			function pickSnapCandidate(candidates) {
+				if (!candidates.length) return null;
+				const absoluteX = Math.abs(dragDeltaX || 0);
+				const absoluteY = Math.abs(dragDeltaY || 0);
+				let preferredName = '';
+
+				if (el === panel) {
+					if (absoluteY > 48) preferredName = dragDeltaY < 0 ? 'top-center' : 'bottom-center';
+				} else if (absoluteX > 64 && absoluteX > absoluteY * 1.12) {
+					preferredName = dragDeltaX < 0 ? 'left-center' : 'right-center';
+				} else if (absoluteY > 64) {
+					preferredName = dragDeltaY < 0 ? 'top-center' : 'bottom-center';
+				}
+
+				const preferred = preferredName && candidates.find(candidate => candidate.name === preferredName);
+				if (preferred) return preferred;
+
+				const rect = el.getBoundingClientRect();
+				const centerX = rect.left + rect.width / 2;
+				const centerY = rect.top + rect.height / 2;
+				return candidates.reduce((best, candidate) => {
+					const candidateCenterX = candidate.left + rect.width / 2;
+					const candidateCenterY = candidate.top + rect.height / 2;
+					const distance = Math.hypot(centerX - candidateCenterX, centerY - candidateCenterY);
+					return !best || distance < best.distance ? { candidate, distance } : best;
+				}, null)?.candidate || candidates[0];
+			}
+
+			function applySnap(candidate, animate = true) {
+				if (!candidate) return;
+				el.dataset.wasDragged = 'true';
+				el.dataset.snapAnchor = candidate.name;
+				if (el === panel) {
+					panel.classList.toggle('dock-top', candidate.name === 'top-center');
+					panel.classList.toggle('dock-bottom', candidate.name === 'bottom-center');
+				}
+
+				el.style.transition = animate ? snapTransition : 'none';
+				el.style.left = `${Math.round(candidate.left)}px`;
+				el.style.top = `${Math.round(candidate.top)}px`;
+				el.style.right = 'auto';
+				el.style.bottom = 'auto';
+				el.style.transform = '';
+
+				window.setTimeout(() => {
+					if (!dragging && el.dataset.snapAnchor === candidate.name) {
+						el.style.transition = '';
+					}
+				}, animate ? 220 : 0);
+			}
+
+			function snapToNearestAnchor(animate = true, anchorName = '') {
+				const candidates = getSnapCandidates();
+				const anchoredCandidate = anchorName && candidates.find(candidate => candidate.name === anchorName);
+				applySnap(anchoredCandidate || pickSnapCandidate(candidates), animate);
+			}
 
 			el.addEventListener('touchstart', (e) => {
 				const isInsideScrollable = e.target.closest('.scrollable-container');
@@ -3929,6 +4254,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				const touch = e.touches[0];
 				startX = touch.clientX;
 				startY = touch.clientY;
+				dragDeltaX = 0;
+				dragDeltaY = 0;
 
 				const rect = el.getBoundingClientRect();
 
@@ -3941,6 +4268,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 				elementStartX = rect.left;
 				elementStartY = rect.top;
+				dragBounds = getPanelBounds();
 				el.style.cursor = 'grabbing';
 			}, {
 				passive: true
@@ -3951,14 +4279,17 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				const touch = e.touches[0];
 				const dx = touch.clientX - startX;
 				const dy = touch.clientY - startY;
+				dragDeltaX = dx;
+				dragDeltaY = dy;
 
 				if (!movedSinceStart && Math.sqrt(dx * dx + dy * dy) > dragThreshold) {
 					movedSinceStart = true;
 				}
 				if (movedSinceStart) {
 					e.preventDefault();
-					const newX = Math.max(0, Math.min(elementStartX + dx, window.innerWidth - el.offsetWidth));
-					const newY = Math.max(0, Math.min(elementStartY + dy, window.innerHeight - el.offsetHeight));
+					const bounds = dragBounds || getPanelBounds();
+					const newX = clamp(elementStartX + dx, bounds.minLeft, bounds.maxLeft);
+					const newY = clamp(elementStartY + dy, bounds.minTop, bounds.maxTop);
 					el.style.left = `${newX}px`;
 					el.style.top = `${newY}px`;
 				}
@@ -3968,18 +4299,26 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 			el.addEventListener('touchend', () => {
 				if (dragging && movedSinceStart) {
-					el.dataset.wasDragged = 'true';
+					snapToNearestAnchor();
 				}
 				dragging = false;
 				movedSinceStart = false;
+				dragBounds = null;
 				el.style.cursor = 'grab';
 			});
 
 			el.addEventListener('touchcancel', () => {
 				dragging = false;
 				movedSinceStart = false;
+				dragBounds = null;
 				el.style.cursor = 'grab';
 			});
+
+			window.addEventListener('resize', () => {
+				if (el.dataset.wasDragged === 'true' && el.dataset.snapAnchor && getComputedStyle(el).display !== 'none') {
+					snapToNearestAnchor(false, el.dataset.snapAnchor);
+				}
+			}, { passive: true });
 		}
 
 		makePanelDraggable(panel);
