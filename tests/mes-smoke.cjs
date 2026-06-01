@@ -340,12 +340,61 @@ async function runLegacyImportFlow(browser) {
   await context.close();
 }
 
+async function runSelectorCandidateFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        .candidate-ad { min-height: 96px; padding: 20px; border-radius: 12px; background: #fff2d8; }
+      </style>
+    </head>
+    <body>
+      <main>
+        <section class="candidate-ad sponsored-slot" data-testid="candidate-ad">Candidate target</section>
+        <section>Content</section>
+      </main>
+    </body>
+  </html>`;
+
+  const { context, page } = await openMesPage(browser, html, { compactPickerMode: true });
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#mobile-block-toggleBtn').click();
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  const targetBox = await page.locator('[data-testid="candidate-ad"]').boundingBox();
+  await page.touchscreen.tap(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
+  await page.waitForSelector('#mobile-block-panel.visible.compact-picker', { timeout: 5000 });
+  await page.locator('#blocker-compact-toggle').click();
+  await page.waitForFunction(() => !document.querySelector('#mobile-block-panel')?.classList.contains('compact-picker'), null, { timeout: 5000 });
+  await page.locator('#blocker-more').click();
+  await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+  await page.locator('#blocker-inspect').click();
+  await page.waitForSelector('#mobile-inspector-panel.visible', { timeout: 5000 });
+  await page.waitForSelector('.selector-candidate-row', { timeout: 5000 });
+
+  const candidates = await page.locator('.selector-candidate-row').count();
+  if (candidates < 2) throw new Error(`expected selector candidates, got ${candidates}`);
+  await page.locator('[data-inspector-action="save-candidate"]').first().click();
+  await page.waitForTimeout(500);
+  const savedRules = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2') || '[]'));
+  if (!savedRules.some(rule => rule.startsWith('mes.test##') && rule.includes('candidate-ad'))) {
+    throw new Error(`candidate rule was not saved: ${JSON.stringify(savedRules)}`);
+  }
+  const hidden = await page.locator('[data-testid="candidate-ad"]').evaluate(el => getComputedStyle(el).display === 'none');
+  if (!hidden) throw new Error('saved selector candidate was not applied');
+
+  await context.close();
+}
+
 async function run() {
   const browser = await chromium.launch({ headless: true });
   try {
     await runMainFlow(browser);
     await runAdvancedFlow(browser);
     await runLegacyImportFlow(browser);
+    await runSelectorCandidateFlow(browser);
   } finally {
     await browser.close();
   }
