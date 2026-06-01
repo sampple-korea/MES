@@ -499,6 +499,7 @@ async function runSelectorCandidateFlow(browser) {
     <body>
       <main>
         <section class="candidate-ad sponsored-slot" data-testid="candidate-ad">Candidate target</section>
+        ${Array.from({ length: 8 }, (_, index) => `<section class="candidate-ad sponsored-slot">Repeated candidate ${index + 1}</section>`).join('')}
         <section>Content</section>
       </main>
     </body>
@@ -521,6 +522,14 @@ async function runSelectorCandidateFlow(browser) {
 
   const candidates = await page.locator('.selector-candidate-row').count();
   if (candidates < 2) throw new Error(`expected selector candidates, got ${candidates}`);
+  const riskText = await page.locator('.selector-candidate-row').first().locator('.selector-candidate-analysis').innerText();
+  if (!/(안정|정밀|위치 의존|넓음|복잡|확인 필요)/.test(riskText)) {
+    throw new Error(`selector candidate risk analysis was not shown: ${riskText}`);
+  }
+  const candidateRiskTexts = await page.locator('.selector-candidate-analysis').evaluateAll(nodes => nodes.map(node => node.textContent || ''));
+  if (!candidateRiskTexts.some(text => text.includes('넓음'))) {
+    throw new Error(`broad selector risk was not shown: ${candidateRiskTexts.join(' | ')}`);
+  }
   await page.locator('[data-inspector-action="preview-candidate"]').first().click();
   await page.waitForTimeout(150);
   const previewed = await page.locator('[data-testid="candidate-ad"]').evaluate(el => el.classList.contains('mes-selector-candidate-match'));
