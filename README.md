@@ -20,7 +20,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Current-site stale rule cleanup for rules that no longer match anything on the page
 - Per-rule enable/disable controls for testing selectors without deleting them
 - Shadow DOM selection with host-scoped rules for open shadow roots
-- Dynamic page monitoring that reapplies rules to later DOM and Shadow DOM changes
+- Dynamic page monitoring that reapplies rules to later DOM, class/id/hidden attribute, and Shadow DOM changes
 - Blocking integrity guard that restores stylesheet and inline hides if a page tampers with them
 - CSS rule hiding mode with inline fallback for sensitive or unsupported selectors
 - Self-healing controls that restore the selector UI if a page removes its nodes or styles
@@ -30,7 +30,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Privacy mode that masks cookies and redacts sensitive resource URLs by default
 - Cookie copy/edit/delete controls for browser-visible cookies, with privacy confirmation on raw value copy
 - URL and arbitrary attribute extraction helpers with sensitive-value confirmation
-- Compact Apple-style mobile UI, auto-minimized picker mode, smart top/bottom docking, magnetic panel snapping, tablet-aware layout, switch controls, and gesture or button launcher modes
+- Compact Apple-style mobile UI, usable compact hierarchy controls, smart top/bottom docking, magnetic panel snapping, tablet-aware layout, switch controls, and gesture or button launcher modes
 - Detected legacy filter import for bringing existing per-site rules into MES without showing extra controls when no data exists
 - Small low-contrast launcher with a fixed 44px touch target and optional shield icon
 
