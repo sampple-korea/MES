@@ -12,7 +12,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 
 - Touch-friendly element picker with parent/child hierarchy navigation
 - Stable CSS selector generation with match-quality hints and broad-selector confirmation
-- Selector candidate inspector with precise, pattern, attribute, class, and resource-based options
+- Selector candidate inspector with preview, copy, and save actions for precise, pattern, attribute, class, and resource-based options
 - Similar-pattern rule creation for hiding repeated matching elements after confirmation
 - Persistent hide rules with search, copy, current-site cleanup, backup, and restore
 - Per-rule enable/disable controls for testing selectors without deleting them

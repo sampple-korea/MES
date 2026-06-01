@@ -5,12 +5,16 @@ const { chromium } = require('playwright');
 const repoRoot = path.resolve(__dirname, '..');
 const scriptText = fs.readFileSync(path.join(repoRoot, 'MES.js'), 'utf8');
 
-async function openMesPage(browser, html, settings = {}, extraStorage = {}) {
+async function openMesPage(browser, html, settings = {}, extraStorage = {}, viewportOptions = {}) {
+  const viewport = {
+    width: viewportOptions.width || 390,
+    height: viewportOptions.height || 844
+  };
   const context = await browser.newContext({
-    viewport: { width: 390, height: 844 },
-    isMobile: true,
-    hasTouch: true,
-    deviceScaleFactor: 2
+    viewport,
+    isMobile: viewportOptions.isMobile ?? true,
+    hasTouch: viewportOptions.hasTouch ?? true,
+    deviceScaleFactor: viewportOptions.deviceScaleFactor || 2
   });
   const page = await context.newPage();
   const pageErrors = [];
@@ -34,8 +38,21 @@ async function openMesPage(browser, html, settings = {}, extraStorage = {}) {
   return { context, page, pageErrors };
 }
 
+async function assertNoClippedText(page, selector, label) {
+  const clipped = await page.locator(selector).evaluateAll(nodes => nodes
+    .filter(node => {
+      const text = (node.textContent || node.getAttribute('aria-label') || '').trim();
+      if (!text) return false;
+      const style = getComputedStyle(node);
+      if (style.display === 'none' || style.visibility === 'hidden' || !node.getClientRects().length) return false;
+      return node.scrollWidth > node.clientWidth + 1 || node.scrollHeight > node.clientHeight + 1;
+    })
+    .map(node => (node.textContent || node.getAttribute('aria-label') || node.id || node.className).trim().replace(/\s+/g, ' ')));
+  if (clipped.length) throw new Error(`${label} text clipped: ${clipped.join(', ')}`);
+}
+
 async function dragByTouch(page, selector, deltaX, deltaY) {
-  await page.locator(selector).evaluate((el, { deltaX, deltaY }) => {
+  const inlineTransition = await page.locator(selector).evaluate((el, { deltaX, deltaY }) => {
     const rect = el.getBoundingClientRect();
     const startX = rect.left + rect.width / 2;
     const startY = rect.top + rect.height / 2;
@@ -69,8 +86,10 @@ async function dragByTouch(page, selector, deltaX, deltaY) {
     send('touchstart', startX, startY, true);
     send('touchmove', startX + deltaX, startY + deltaY, true);
     send('touchend', startX + deltaX, startY + deltaY, false);
+    return el.style.transition;
   }, { deltaX, deltaY });
   await page.waitForTimeout(260);
+  return inlineTransition;
 }
 
 async function fireLauncherGesture(page, fingerCount, tapCount) {
@@ -183,6 +202,10 @@ async function runMainFlow(browser) {
   await page.touchscreen.tap(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
   await page.waitForTimeout(250);
   await page.waitForSelector('#mobile-block-panel.visible.compact-picker', { timeout: 5000 });
+  const compactSliderBox = await page.locator('#mobile-block-panel.compact-picker #blocker-slider').boundingBox();
+  if (!compactSliderBox || compactSliderBox.width < 80 || compactSliderBox.height < 2) {
+    throw new Error(`compact navigation slider is not usable: ${JSON.stringify(compactSliderBox)}`);
+  }
   const selected = await page.locator('#blocker-info').innerText();
   if (!selected.trim()) throw new Error('touch selection did not populate selector');
 
@@ -200,6 +223,63 @@ async function runMainFlow(browser) {
   if (!dynamicHidden) throw new Error('dynamic stylesheet blocking did not hide a later matching element');
   if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join(' | ')}`);
   await context.close();
+}
+
+async function runResponsiveClippingFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 16px; display: grid; gap: 12px; }
+        .ad-card { min-height: 96px; padding: 18px; border-radius: 12px; background: #fff2d8; border: 1px solid #ffd48a; }
+        .content-card { padding: 18px; border-radius: 12px; background: #fff; }
+      </style>
+    </head>
+    <body>
+      <main>
+        <section class="ad-card promoted-slot" data-testid="responsive-ad">Responsive target</section>
+        <section class="content-card">Content</section>
+      </main>
+    </body>
+  </html>`;
+
+  for (const width of [320, 360, 390]) {
+    const { context, page } = await openMesPage(browser, html, { compactPickerMode: true }, {}, { width, height: 844 });
+    await page.locator('#mobile-block-toggleBtn').click();
+    await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+    await assertNoClippedText(page, '#mobile-block-panel .mb-btn, #mobile-block-panel .btn-label', `main panel ${width}px`);
+
+    const targetBox = await page.locator('[data-testid="responsive-ad"]').boundingBox();
+    await page.touchscreen.tap(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
+    await page.waitForSelector('#mobile-block-panel.visible.compact-picker', { timeout: 5000 });
+    await assertNoClippedText(page, '#mobile-block-panel .mb-btn, #mobile-block-panel .btn-label', `compact panel ${width}px`);
+
+    await page.locator('#blocker-compact-toggle').click();
+    await page.waitForFunction(() => !document.querySelector('#mobile-block-panel')?.classList.contains('compact-picker'), null, { timeout: 5000 });
+    await page.locator('#blocker-more').click();
+    await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+    await assertNoClippedText(page, '#mobile-block-panel .mb-btn, #mobile-block-panel .btn-label', `expanded actions ${width}px`);
+
+    await page.locator('#blocker-settings').click();
+    await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+    await page.locator('[data-launcher-mode="gesture"]').click();
+    await page.waitForFunction(() => document.querySelector('#gesture-detail-settings')?.classList.contains('visible'), null, { timeout: 5000 });
+    await assertNoClippedText(page, '#mobile-settings-panel .mb-btn', `settings controls ${width}px`);
+    await page.locator('#settings-close').click();
+    await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+
+    const actionsVisible = await page.locator('#blocker-secondary-actions').evaluate(el => el.classList.contains('visible'));
+    if (!actionsVisible) await page.locator('#blocker-more').click();
+    await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+    await page.locator('#blocker-inspect').click();
+    await page.waitForSelector('#mobile-inspector-panel.visible', { timeout: 5000 });
+    await page.waitForSelector('.selector-candidate-row', { timeout: 5000 });
+    await assertNoClippedText(page, '#mobile-inspector-panel .mb-btn, #mobile-inspector-panel .selector-candidate-actions .mb-btn', `inspector controls ${width}px`);
+
+    await context.close();
+  }
 }
 
 async function runAdvancedFlow(browser) {
@@ -238,31 +318,41 @@ async function runAdvancedFlow(browser) {
   const bottomDockedTop = await page.locator('#mobile-block-panel').evaluate(panel => panel.classList.contains('dock-top'));
   if (!bottomDockedTop) throw new Error('bottom target did not move picker to top');
 
-  await dragByTouch(page, '#mobile-block-panel', 0, -520);
+  const topTransition = await dragByTouch(page, '#mobile-block-panel', 0, -520);
+  if (!/left|top|transform/.test(topTransition)) {
+    throw new Error(`snap transition was not applied: ${topTransition}`);
+  }
   const topSnap = await page.locator('#mobile-block-panel').evaluate(panel => {
     const rect = panel.getBoundingClientRect();
     return {
       anchor: panel.dataset.snapAnchor,
       top: rect.top,
-      centerOffset: Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2)
+      centerOffset: Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2),
+      inlineTransition: panel.style.transition
     };
   });
   if (topSnap.anchor !== 'top-center' || topSnap.top > 24 || topSnap.centerOffset > 2) {
     throw new Error(`panel did not snap to top center: ${JSON.stringify(topSnap)}`);
   }
+  if (topSnap.inlineTransition) throw new Error(`snap transition was not cleared: ${topSnap.inlineTransition}`);
 
-  await dragByTouch(page, '#mobile-block-panel', 0, 720);
+  const bottomTransition = await dragByTouch(page, '#mobile-block-panel', 0, 720);
+  if (!/left|top|transform/.test(bottomTransition)) {
+    throw new Error(`bottom snap transition was not applied: ${bottomTransition}`);
+  }
   const bottomSnap = await page.locator('#mobile-block-panel').evaluate(panel => {
     const rect = panel.getBoundingClientRect();
     return {
       anchor: panel.dataset.snapAnchor,
       bottomGap: window.innerHeight - rect.bottom,
-      centerOffset: Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2)
+      centerOffset: Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2),
+      inlineTransition: panel.style.transition
     };
   });
   if (bottomSnap.anchor !== 'bottom-center' || bottomSnap.bottomGap > 24 || bottomSnap.centerOffset > 2) {
     throw new Error(`panel did not snap to bottom center: ${JSON.stringify(bottomSnap)}`);
   }
+  if (bottomSnap.inlineTransition) throw new Error(`bottom snap transition was not cleared: ${bottomSnap.inlineTransition}`);
 
   await page.evaluate(() => {
     document.querySelector('#mobile-block-toggleBtn').remove();
@@ -376,8 +466,29 @@ async function runSelectorCandidateFlow(browser) {
 
   const candidates = await page.locator('.selector-candidate-row').count();
   if (candidates < 2) throw new Error(`expected selector candidates, got ${candidates}`);
+  await page.locator('[data-inspector-action="preview-candidate"]').first().click();
+  await page.waitForTimeout(150);
+  const previewed = await page.locator('[data-testid="candidate-ad"]').evaluate(el => el.classList.contains('mes-selector-candidate-match'));
+  if (!previewed) throw new Error('selector candidate preview did not mark matched elements');
+  const previewStyle = await page.locator('[data-testid="candidate-ad"]').evaluate(el => {
+    const style = getComputedStyle(el);
+    return {
+      outlineStyle: style.outlineStyle,
+      outlineWidth: style.outlineWidth,
+      backgroundColor: style.backgroundColor
+    };
+  });
+  if (previewStyle.outlineStyle === 'none' || previewStyle.outlineWidth === '0px' || !previewStyle.backgroundColor.includes('52, 199, 89')) {
+    throw new Error(`selector candidate preview style was not visible: ${JSON.stringify(previewStyle)}`);
+  }
+  const previewToast = await page.locator('#mes-toast-container .mes-toast.show').last().innerText();
+  if (!previewToast.includes('후보') || !previewToast.includes('표시')) {
+    throw new Error(`selector candidate preview toast was not shown: ${previewToast}`);
+  }
   await page.locator('[data-inspector-action="save-candidate"]').first().click();
   await page.waitForTimeout(500);
+  const previewCleared = await page.locator('[data-testid="candidate-ad"]').evaluate(el => !el.classList.contains('mes-selector-candidate-match'));
+  if (!previewCleared) throw new Error('selector candidate preview was not cleared after saving');
   const savedRules = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2') || '[]'));
   if (!savedRules.some(rule => rule.startsWith('mes.test##') && rule.includes('candidate-ad'))) {
     throw new Error(`candidate rule was not saved: ${JSON.stringify(savedRules)}`);
@@ -392,6 +503,7 @@ async function run() {
   const browser = await chromium.launch({ headless: true });
   try {
     await runMainFlow(browser);
+    await runResponsiveClippingFlow(browser);
     await runAdvancedFlow(browser);
     await runLegacyImportFlow(browser);
     await runSelectorCandidateFlow(browser);
