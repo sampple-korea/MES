@@ -1,13 +1,16 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플
-// @version      1.2.8
+// @version      1.3.0
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      Apache-2.0
 // @grant        GM_setClipboard
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM.setClipboard
+// @grant        GM.setValue
+// @grant        GM.getValue
 // @namespace https://adguard.com
 // @downloadURL https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js
 // @updateURL https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.meta.js
@@ -15,29 +18,57 @@
 
 (async function() {
 	'use strict';
-	const SCRIPT_ID = "[MES v1.2.8 M3]";
-	const ADGUARD_LOGO_URL = 'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/AdGuard.svg/500px-AdGuard.svg.png';
+	const SCRIPT_ID = "[MES v1.3.0 M3]";
+	const HIGHLIGHT_CLASS = 'mes-selected-element';
+	const LEGACY_HIGHLIGHT_CLASS = 'selected-element';
+	const TOGGLE_BASE_SIZE = 34;
+	const ALT_TOGGLE_LOGO_URL = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Cpath fill=%22%23a0c9ff%22 d=%22M32 5 52 13v15c0 13.9-8.1 25.9-20 31C20.1 53.9 12 41.9 12 28V13l20-8Z%22/%3E%3Cpath fill=%22%2300325a%22 d=%22M22 25h20v6H22v-6Zm0 10h14v6H22v-6Z%22/%3E%3C/svg%3E';
 
 	const STRINGS = {
 		panelTitle: '요소 차단',
-		settingsTitle: 'MES by 삼플',
+		settingsTitle: '설정',
+		settingsCredit: 'MES by 삼플',
 		listTitle: '저장된 차단 규칙',
 		selectedElementLabel: '선택된 요소 (CSS 선택자)',
-		parentLevelLabel: '상위 요소 선택 레벨:',
+		parentLevelLabel: '요소 탐색',
+		navRoot: '원본',
+		navParent: '상위',
+		navChild: '하위',
 		copy: '복사',
+		copyCss: 'CSS',
+		copyRule: '규칙',
 		preview: '미리보기',
 		restorePreview: '되돌리기',
 		saveRule: '규칙 저장',
+		extractUrl: 'URL',
+		inspect: '검사',
+		more: '더보기',
+		parent: '상위',
+		child: '하위',
 		list: '목록',
 		settings: '설정',
 		cancel: '취소',
 		close: '닫기',
+		inspectorTitle: '요소 정보',
+		copyInfo: '정보 복사',
 		includeSiteNameLabel: '규칙에 사이트명 포함',
-		useAdguardLogoLabel: '토글 버튼 AdGuard 로고',
+		useAdguardLogoLabel: '토글 버튼 방패 스타일',
 		panelOpacityLabel: '패널 투명도',
 		toggleSizeLabel: '토글 버튼 크기',
 		toggleOpacityLabel: '토글 버튼 투명도',
 		tempDisableLabel: '모든 규칙 임시 비활성화',
+		observeDomChangesLabel: '동적 페이지 자동 재적용',
+		shadowDomSupportLabel: 'Shadow DOM 탐색',
+		selectorHintModeLabel: '강화 선택자 힌트',
+		privacyModeLabel: '민감 정보 보호',
+		autoCloseAfterCopyLabel: '복사 후 선택 모드 종료',
+		launcherModeLabel: '열기 방식',
+		launcherButton: '버튼',
+		launcherGesture: '제스처',
+		hideStrategyLabel: '숨김 방식',
+		hideStrategyDisplay: '제거',
+		hideStrategyVisibility: '자리 유지',
+		hideStrategyOpacity: '투명화',
 		backupLabel: '규칙 백업 (JSON)',
 		restoreLabel: '규칙 복원 (JSON)',
 		togglePositionLabel: '토글 버튼 위치',
@@ -48,42 +79,73 @@
 		on: 'ON',
 		off: 'OFF',
 		noRules: '저장된 규칙이 없습니다.',
-		noElementSelected: '⚠️ 선택된 요소가 없습니다.',
-		cannotGenerateSelector: '❌ 유효한 선택자를 생성할 수 없습니다.',
-		selectorCopied: '✅ 선택자가 복사되었습니다!',
-		clipboardError: '❌ 클립보드 복사 실패',
+		noElementSelected: '선택된 요소가 없습니다.',
+		cannotGenerateSelector: '유효한 선택자를 생성할 수 없습니다.',
+		selectorCopied: '선택자가 복사되었습니다.',
+		ruleCopied: '규칙 복사됨',
+		urlCopied: 'URL 복사됨',
+		infoCopied: '요소 정보 복사됨',
+		sensitiveCopyConfirm: '민감 정보가 포함될 수 있습니다. 복사할까요?',
+		urlNotFound: 'URL을 찾을 수 없습니다.',
+		clipboardError: '클립보드 복사 실패',
+		similarSelectorCopied: '유사 선택자 복사됨',
+		noChildElements: '하위 요소가 없습니다.',
+		inspectorUnavailable: '선택된 요소 정보가 없습니다.',
+		noCookies: '표시할 쿠키가 없습니다.',
+		cookieReadOnly: '보호 모드에서는 쿠키 이름과 마스킹된 값만 표시합니다.',
+		cookieValuesMasked: '쿠키 값은 보호됨',
+		resourceMetadataLabel: '리소스 메타데이터',
 		promptCopy: '선택자를 직접 복사하세요:',
-		alreadyHidden: 'ℹ️ 이미 숨겨진 요소입니다.',
-		previewDifferentElement: '⚠️ 다른 요소가 미리보기 중입니다.',
-		ruleSavedReloading: '✅ 규칙 저장됨! 적용 중...',
-		ruleSavedApplyFailed: '⚠️ 규칙은 저장했으나 즉시 적용 실패.',
-		ruleAddError: '❌ 규칙 추가 중 오류:',
-		ruleExists: 'ℹ️ 이미 저장된 규칙입니다.',
-		listShowError: '❌ 목록 표시 중 오류 발생',
-		ruleCopied: '✅ 규칙 복사됨',
-		ruleDeleted: '🗑️ 규칙 삭제됨',
-		ruleDeleteError: '❌ 규칙 삭제 실패',
-		settingsSaved: '✅ 설정 저장됨',
-		settingsSaveError: '❌ 설정 저장 실패',
-		backupStarting: '💾 규칙 백업 파일 다운로드를 시작합니다.',
-		backupError: '❌ 규칙 백업 실패',
-		restorePrompt: '📁 복원할 JSON 파일을 선택하세요.',
-		restoreSuccess: '✅ 규칙 복원 완료! 적용 중...',
-		restoreErrorInvalidFile: '❌ 잘못된 파일 형식 또는 내용입니다.',
-		restoreErrorGeneral: '❌ 규칙 복원 실패',
-		blockingApplied: (count) => `✅ ${count}개의 규칙 적용됨`,
-		blockingApplyError: '❌ 규칙 적용 중 오류 발생',
-		tempBlockingOn: '🚫 모든 규칙 임시 비활성화됨',
-		tempBlockingOff: '✅ 규칙 다시 활성화됨'
+		alreadyHidden: '이미 숨겨진 요소입니다.',
+		previewDifferentElement: '다른 요소가 미리보기 중입니다.',
+		ruleSavedReloading: '규칙 저장됨. 적용 중...',
+		ruleSavedApplyFailed: '규칙은 저장했으나 즉시 적용 실패.',
+		ruleAddError: '규칙 추가 중 오류:',
+		ruleExists: '이미 저장된 규칙입니다.',
+		confirmBroadSelector: (count) => `이 선택자는 ${count}개 요소와 일치합니다. 그대로 저장할까요?`,
+		listShowError: '목록 표시 중 오류 발생',
+		ruleDeleted: '규칙 삭제됨',
+		ruleDeleteError: '규칙 삭제 실패',
+		noMatchingRules: '검색 결과가 없습니다.',
+		blocklistSearchPlaceholder: '규칙 검색',
+		blocklistCopySite: '적용 규칙 복사',
+		blocklistCopyAll: '전체 복사',
+		blocklistDeleteSite: '현재 사이트 삭제',
+		blocklistSummary: (total, current) => `전체 ${total}개 · 현재 사이트 적용 ${current}개`,
+		rulesCopied: (count) => `${count}개 규칙 복사됨`,
+		confirmDeleteSiteRules: (hostname, count) => `${hostname}에 저장된 규칙 ${count}개를 삭제할까요?`,
+		siteRulesDeleted: (count) => `현재 사이트 규칙 ${count}개 삭제됨`,
+		settingsSaved: '설정 저장됨',
+		settingsSaveError: '설정 저장 실패',
+		backupStarting: '규칙 백업 파일 다운로드를 시작합니다.',
+		backupNoRules: '백업할 규칙이 없습니다.',
+		backupError: '규칙 백업 실패',
+		restorePrompt: '복원할 JSON 파일을 선택하세요.',
+		restoreSuccess: '규칙 복원 완료. 적용 중...',
+		restoreSuccessDeduped: (count) => `규칙 복원 완료. 중복 ${count}개 제거됨`,
+		restoreErrorInvalidFile: '잘못된 파일 형식 또는 내용입니다.',
+		restoreErrorGeneral: '규칙 복원 실패',
+		blockingApplied: (count) => `${count}개의 규칙 적용됨`,
+		blockingApplyError: '규칙 적용 중 오류 발생',
+		tempBlockingOn: '모든 규칙 임시 비활성화됨',
+		tempBlockingOff: '규칙 다시 활성화됨'
 	};
 
 	const DEFAULT_SETTINGS = {
 		includeSiteName: true,
-		panelOpacity: 0.65,
+		panelOpacity: 0.94,
 		toggleSizeScale: 1.0,
 		toggleOpacity: 1.0,
 		showAdguardLogo: false,
 		tempBlockingDisabled: false,
+		observeDomChanges: true,
+		shadowDomSupport: true,
+		selectorHintMode: true,
+		privacyMode: true,
+		autoCloseAfterCopy: false,
+		hideToggleButton: false,
+		twoFingerGesture: false,
+		hideStrategy: 'display',
 		toggleBtnCorner: 'bottom-right'
 	};
 
@@ -91,13 +153,48 @@
 	const SETTINGS_KEY = 'mobileElementSelectorSettings_v1_2';
 	const BLOCKED_SELECTORS_KEY = 'mobileBlockedSelectors_v2';
 
+	async function gmGetValue(key, defaultValue) {
+		if (typeof globalThis.GM_getValue === 'function') return globalThis.GM_getValue(key, defaultValue);
+		if (typeof globalThis.GM?.getValue === 'function') return globalThis.GM.getValue(key, defaultValue);
+		try {
+			const value = localStorage.getItem(key);
+			return value === null ? defaultValue : value;
+		} catch (e) {}
+		return defaultValue;
+	}
+
+	async function gmSetValue(key, value) {
+		if (typeof globalThis.GM_setValue === 'function') return globalThis.GM_setValue(key, value);
+		if (typeof globalThis.GM?.setValue === 'function') return globalThis.GM.setValue(key, value);
+		try {
+			localStorage.setItem(key, value);
+		} catch (e) {}
+		return undefined;
+	}
+
+	function gmSetClipboard(text) {
+		if (typeof globalThis.GM_setClipboard === 'function') {
+			globalThis.GM_setClipboard(text);
+			return true;
+		}
+		if (typeof globalThis.GM?.setClipboard === 'function') {
+			globalThis.GM.setClipboard(text);
+			return true;
+		}
+		if (navigator.clipboard?.writeText && window.isSecureContext) {
+			navigator.clipboard.writeText(text).catch(err => console.warn(SCRIPT_ID, 'Clipboard API write failed:', err));
+			return true;
+		}
+		return false;
+	}
+
 	async function loadSettings() {
 		let storedSettings = {};
 		try {
-			const storedValue = await GM_getValue(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+			const storedValue = await gmGetValue(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
 			storedSettings = JSON.parse(storedValue || '{}');
 		} catch (e) {
-			console.error(SCRIPT_ID, `Error loading settings from GM_getValue('${SETTINGS_KEY}'), using defaults.`, e);
+			console.error(SCRIPT_ID, `Error loading settings from storage key '${SETTINGS_KEY}', using defaults.`, e);
 			storedSettings = {
 				...DEFAULT_SETTINGS
 			};
@@ -123,6 +220,18 @@
 		settings.includeSiteName = typeof settings.includeSiteName === 'boolean' ? settings.includeSiteName : DEFAULT_SETTINGS.includeSiteName;
 		settings.showAdguardLogo = typeof settings.showAdguardLogo === 'boolean' ? settings.showAdguardLogo : DEFAULT_SETTINGS.showAdguardLogo;
 		settings.tempBlockingDisabled = typeof settings.tempBlockingDisabled === 'boolean' ? settings.tempBlockingDisabled : DEFAULT_SETTINGS.tempBlockingDisabled;
+		settings.observeDomChanges = typeof settings.observeDomChanges === 'boolean' ? settings.observeDomChanges : DEFAULT_SETTINGS.observeDomChanges;
+		settings.shadowDomSupport = typeof settings.shadowDomSupport === 'boolean' ? settings.shadowDomSupport : DEFAULT_SETTINGS.shadowDomSupport;
+		settings.selectorHintMode = typeof settings.selectorHintMode === 'boolean' ? settings.selectorHintMode : DEFAULT_SETTINGS.selectorHintMode;
+		settings.privacyMode = typeof settings.privacyMode === 'boolean' ? settings.privacyMode : DEFAULT_SETTINGS.privacyMode;
+		settings.autoCloseAfterCopy = typeof settings.autoCloseAfterCopy === 'boolean' ? settings.autoCloseAfterCopy : DEFAULT_SETTINGS.autoCloseAfterCopy;
+		settings.hideToggleButton = typeof settings.hideToggleButton === 'boolean' ? settings.hideToggleButton : DEFAULT_SETTINGS.hideToggleButton;
+		settings.twoFingerGesture = typeof settings.twoFingerGesture === 'boolean' ? settings.twoFingerGesture : DEFAULT_SETTINGS.twoFingerGesture;
+		settings.twoFingerGesture = settings.hideToggleButton ? true : false;
+		const validHideStrategies = ['display', 'visibility', 'opacity'];
+		if (!validHideStrategies.includes(settings.hideStrategy)) {
+			settings.hideStrategy = DEFAULT_SETTINGS.hideStrategy;
+		}
 
 		const validCorners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 		if (!validCorners.includes(settings.toggleBtnCorner)) {
@@ -134,28 +243,348 @@
 
 	async function saveSettings() {
 		try {
-			await GM_setValue(SETTINGS_KEY, JSON.stringify(settings));
+			await gmSetValue(SETTINGS_KEY, JSON.stringify(settings));
 			console.log(SCRIPT_ID, "Settings saved:", settings);
 		} catch (e) {
-			console.error(SCRIPT_ID, `Error saving settings to GM_setValue('${SETTINGS_KEY}')`, e);
+			console.error(SCRIPT_ID, `Error saving settings to storage key '${SETTINGS_KEY}'`, e);
 			showToast(STRINGS.settingsSaveError, 'error');
 		}
+	}
+
+	const RELIABLE_SELECTOR_ATTRIBUTES = [
+		'data-testid',
+		'data-cy',
+		'data-test-id',
+		'data-test',
+		'name',
+		'aria-label',
+		'alt',
+		'title',
+		'placeholder',
+		'type'
+	];
+	const RESOURCE_ATTRIBUTES = ['href', 'src', 'data-src', 'data-original', 'poster', 'action'];
+	const VOLATILE_CLASS_RE = /active|select|selected|focus|hover|disabled|checked|open|closed|visible|hidden|loading|transition|animate|animating|enter|leave|js-|ui-|css-|style-/i;
+	const DYNAMIC_TOKEN_RE = /(?:^|[-_])(?:ember|react|vue|ng|svelte|random|hash|uuid|nonce|temp|tmp)(?:[-_]|$)|[a-f0-9]{7,}|[_-]?\d{3,}/i;
+	const BROAD_SELECTOR_HINT_RE = /(ad|ads|advert|banner|sponsor|promoted|promotion|popup|pop|modal|overlay|interstitial|notice|recommend|related|widget|slot|wing)/i;
+
+	function escapeAttributeValue(value) {
+		return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim();
+	}
+
+	function cssEscape(value) {
+		const input = String(value ?? '');
+		if (typeof globalThis.CSS?.escape === 'function') return globalThis.CSS.escape(input);
+		return input
+			.replace(/^(-?\d)/, match => Array.from(match).map(ch => `\\${ch.charCodeAt(0).toString(16)} `).join(''))
+			.replace(/[^a-zA-Z0-9_-]/g, '\\$&');
+	}
+
+	function isShadowRoot(root) {
+		return typeof ShadowRoot !== 'undefined' && root instanceof ShadowRoot;
+	}
+
+	function isUsableAttributeValue(value) {
+		if (!value) return false;
+		const normalized = String(value).trim();
+		return normalized.length > 0 && normalized.length <= 120 && !/[\n\r]/.test(normalized);
+	}
+
+	function getSelectorRoot(el) {
+		if (!settings.shadowDomSupport || !el || typeof el.getRootNode !== 'function') return document;
+		const root = el.getRootNode();
+		return isShadowRoot(root) ? root : document;
+	}
+
+	function getDeepElementFromPoint(x, y) {
+		let target = document.elementFromPoint(x, y);
+		if (!settings.shadowDomSupport) return target;
+
+		while (target && target.shadowRoot && typeof target.shadowRoot.elementFromPoint === 'function') {
+			const innerTarget = target.shadowRoot.elementFromPoint(x, y);
+			if (!innerTarget || innerTarget === target) break;
+			target = innerTarget;
+		}
+		return target;
+	}
+
+	function getParentElement(el) {
+		if (!el) return null;
+		if (el.parentElement) return el.parentElement;
+		const root = settings.shadowDomSupport && typeof el.getRootNode === 'function' ? el.getRootNode() : null;
+		return isShadowRoot(root) ? root.host : null;
+	}
+
+	function getSelectorParentElement(el, selectorRoot) {
+		if (!el) return null;
+		if (el.parentElement) return el.parentElement;
+		return isShadowRoot(selectorRoot) ? null : getParentElement(el);
+	}
+
+	function getChildElements(el) {
+		if (!el) return [];
+		if (settings.shadowDomSupport && el.shadowRoot) {
+			return Array.from(el.shadowRoot.children).filter(child => !child.closest?.('.mobile-block-ui'));
+		}
+		return Array.from(el.children || []).filter(child => !child.closest?.('.mobile-block-ui'));
+	}
+
+	function collectOpenShadowRoots(root = document, roots = []) {
+		const nodes = root.querySelectorAll ? root.querySelectorAll('*') : [];
+		nodes.forEach(node => {
+			if (roots.length >= 80) return;
+			if (node.shadowRoot) {
+				roots.push(node.shadowRoot);
+				collectOpenShadowRoots(node.shadowRoot, roots);
+			}
+		});
+		return roots;
+	}
+
+	function querySelectorAllEverywhere(selector, preferredRoot = document) {
+		const results = [];
+		const seen = new Set();
+		const roots = [preferredRoot];
+
+		if (settings.shadowDomSupport && preferredRoot === document) {
+			roots.push(...collectOpenShadowRoots(document));
+		}
+
+		roots.forEach(root => {
+			if (results.length >= 600) return;
+			try {
+				root.querySelectorAll(selector).forEach(el => {
+					if (results.length >= 600) return;
+					if (!seen.has(el) && !el.closest?.('.mobile-block-ui')) {
+						seen.add(el);
+						results.push(el);
+					}
+				});
+			} catch (e) {}
+		});
+
+		return results;
+	}
+
+	function countSelectorMatches(selector, root = document) {
+		if (!selector) return 0;
+		try {
+			return querySelectorAllEverywhere(selector, root).length;
+		} catch (e) {
+			return -1;
+		}
+	}
+
+	function makeAttributeSelector(el, attrName, tagName = '') {
+		const value = el.getAttribute(attrName);
+		if (!isUsableAttributeValue(value)) return '';
+		return `${tagName || el.tagName.toLowerCase()}[${attrName}="${escapeAttributeValue(value)}"]`;
+	}
+
+	function getBestAttributePart(el, tagName, root, requireUnique) {
+		for (const attrName of RELIABLE_SELECTOR_ATTRIBUTES) {
+			if (!el.hasAttribute(attrName)) continue;
+			const attrSelector = makeAttributeSelector(el, attrName, tagName);
+			if (!attrSelector) continue;
+			if (!requireUnique) return attrSelector;
+			if (countSelectorMatches(attrSelector, root) === 1) return attrSelector;
+		}
+		return '';
+	}
+
+	function getBroadSelectorHint(el, tagName, root) {
+		if (!settings.selectorHintMode) return '';
+		const candidates = [];
+		const id = el.id || '';
+		if (BROAD_SELECTOR_HINT_RE.test(id)) {
+			const stableIdPrefix = id.replace(DYNAMIC_TOKEN_RE, '').slice(0, 32);
+			if (stableIdPrefix.length >= 3) {
+				candidates.push(`${tagName}[id^="${escapeAttributeValue(stableIdPrefix)}"]`);
+			}
+			const match = id.match(BROAD_SELECTOR_HINT_RE);
+			if (match?.[0]?.length >= 2) {
+				candidates.push(`${tagName}[id*="${escapeAttributeValue(match[0])}"]`);
+			}
+		}
+
+		Array.from(el.classList || []).forEach(className => {
+			if (BROAD_SELECTOR_HINT_RE.test(className) && !DYNAMIC_TOKEN_RE.test(className)) {
+				candidates.push(`${tagName}.${cssEscape(className)}`);
+			}
+		});
+
+		['src', 'href'].forEach(attrName => {
+			const value = el.getAttribute?.(attrName);
+			if (!value || !BROAD_SELECTOR_HINT_RE.test(value)) return;
+			try {
+				const filename = new URL(value, location.href).pathname.split('/').pop();
+				if (filename && filename.length >= 4) {
+					candidates.push(`${tagName}[${attrName}*="${escapeAttributeValue(filename)}"]`);
+				}
+			} catch (e) {}
+		});
+
+		for (const candidate of candidates) {
+			const matches = querySelectorAllEverywhere(candidate, root);
+			if (matches.length > 0 && matches.length <= 20 && matches.includes(el)) {
+				return candidate;
+			}
+		}
+		return '';
+	}
+
+	function getStableClasses(el) {
+		return Array.from(el.classList || [])
+			.filter(c => c && c.length > 2 &&
+				!/^[a-z]{1,2}$/i.test(c) &&
+				!VOLATILE_CLASS_RE.test(c) &&
+				!DYNAMIC_TOKEN_RE.test(c) &&
+				!/^[A-Z0-9]{4,}$/.test(c) &&
+				!c.includes('--') && !c.includes('__') &&
+				![HIGHLIGHT_CLASS, LEGACY_HIGHLIGHT_CLASS, 'mobile-block-ui'].some(uiClass => c.includes(uiClass)))
+			.slice(0, 2);
+	}
+
+	function getRuleParts(rule) {
+		if (typeof rule !== 'string') return null;
+		const separatorIndex = rule.indexOf('##');
+		if (separatorIndex < 0) return null;
+		return {
+			domain: rule.slice(0, separatorIndex).trim(),
+			selector: rule.slice(separatorIndex + 2).trim()
+		};
+	}
+
+	function ruleAppliesToHost(rule, hostname = location.hostname) {
+		const parts = getRuleParts(rule);
+		if (!parts || !parts.selector) return false;
+		if (!parts.domain || parts.domain === '*') return true;
+		return hostname === parts.domain || hostname.endsWith(`.${parts.domain}`);
+	}
+
+	function isSiteSpecificRuleForHost(rule, hostname = location.hostname) {
+		const parts = getRuleParts(rule);
+		return !!parts?.domain && parts.domain !== '*' && (hostname === parts.domain || hostname.endsWith(`.${parts.domain}`));
+	}
+
+	function normalizeRulesForStorage(rules) {
+		const seen = new Set();
+		const normalized = [];
+		let invalidCount = 0;
+		let duplicateCount = 0;
+
+		(Array.isArray(rules) ? rules : []).forEach(rule => {
+			const trimmed = typeof rule === 'string' ? rule.trim() : '';
+			const parts = getRuleParts(trimmed);
+			if (!parts || !parts.selector) {
+				invalidCount++;
+				return;
+			}
+			const cleanRule = `${parts.domain}##${parts.selector}`;
+			if (seen.has(cleanRule)) {
+				duplicateCount++;
+				return;
+			}
+			seen.add(cleanRule);
+			normalized.push(cleanRule);
+		});
+
+		return {
+			rules: normalized,
+			invalidCount,
+			duplicateCount
+		};
+	}
+
+	function getRuleTextForSelector(selector) {
+		if (!selector) return '';
+		return settings.includeSiteName ? `${location.hostname}##${selector}` : `##${selector}`;
+	}
+
+	function copyToClipboard(text, fallbackLabel = STRINGS.promptCopy) {
+		try {
+			if (!gmSetClipboard(text)) throw new Error('No clipboard API available');
+			return true;
+		} catch (err) {
+			console.error(SCRIPT_ID, "Clipboard write failed:", err);
+			try {
+				prompt(fallbackLabel, text);
+			} catch (e) {}
+			return false;
+		}
+	}
+
+	function findNearestUrl(el) {
+		let current = el;
+		for (let depth = 0; current && depth < 6; depth++) {
+			for (const attrName of RESOURCE_ATTRIBUTES) {
+				const value = current.getAttribute?.(attrName);
+				if (isUsableAttributeValue(value)) {
+					try {
+						return new URL(value, location.href).href;
+					} catch (e) {
+						return value;
+					}
+				}
+			}
+
+			try {
+				const backgroundImage = window.getComputedStyle(current).backgroundImage;
+				const match = backgroundImage && backgroundImage.match(/url\(["']?(.*?)["']?\)/);
+				if (match?.[1]) {
+					return new URL(match[1], location.href).href;
+				}
+			} catch (e) {}
+
+			current = getParentElement(current);
+		}
+		return '';
+	}
+
+	function ensureElementHighlightStyle(el) {
+		if (!settings.shadowDomSupport || !el || typeof el.getRootNode !== 'function') return;
+		const root = el.getRootNode();
+		if (!isShadowRoot(root) || root.getElementById('mes-shadow-highlight-style')) return;
+		const highlightStyle = document.createElement('style');
+		highlightStyle.id = 'mes-shadow-highlight-style';
+		highlightStyle.textContent = `
+.${HIGHLIGHT_CLASS} {
+    outline: 3px solid #ffb4ab !important;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45) !important;
+    background-color: rgba(255, 82, 82, 0.15) !important;
+    transition: background-color 0.1s ease, outline 0.1s ease, box-shadow 0.1s ease;
+    pointer-events: none;
+}`;
+		root.appendChild(highlightStyle);
+	}
+
+	function applySelectionHighlight(el) {
+		if (!el) return;
+		ensureElementHighlightStyle(el);
+		el.classList.add(HIGHLIGHT_CLASS);
+	}
+
+	function clearSelectionHighlight(el) {
+		if (!el) return;
+		el.classList.remove(HIGHLIGHT_CLASS);
 	}
 
 	const style = document.createElement('style');
 
 	function updateCSSVariables() {
 		document.documentElement.style.setProperty('--panel-opacity', settings.panelOpacity);
-		document.documentElement.style.setProperty('--toggle-size', `${56 * settings.toggleSizeScale}px`);
+		document.documentElement.style.setProperty('--toggle-size', `${TOGGLE_BASE_SIZE * settings.toggleSizeScale}px`);
 		document.documentElement.style.setProperty('--toggle-opacity', settings.toggleOpacity);
 
-		document.querySelectorAll('#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel').forEach(p => {
-			p.style.setProperty('background-color', `rgba(40, 43, 48, ${settings.panelOpacity})`, 'important');
+		document.querySelectorAll('#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel').forEach(p => {
+			p.style.setProperty('background-color', `rgba(248, 248, 250, ${settings.panelOpacity})`, 'important');
 		});
 		if (toggleBtn) {
 			toggleBtn.style.setProperty('width', `var(--toggle-size)`, 'important');
 			toggleBtn.style.setProperty('height', `var(--toggle-size)`, 'important');
 			toggleBtn.style.setProperty('opacity', `var(--toggle-opacity)`, 'important');
+			toggleBtn.classList.toggle('hidden-toggle', settings.hideToggleButton);
 		}
 	}
 
@@ -194,42 +623,42 @@
 
 	style.textContent = `
 :root {
-    --md-sys-color-primary: #a0c9ff; --md-sys-color-on-primary: #00325a;
-    --md-sys-color-primary-container: #004880; --md-sys-color-on-primary-container: #d1e4ff;
-    --md-sys-color-secondary: #bdc7dc; --md-sys-color-on-secondary: #283141;
-    --md-sys-color-secondary-container: #3e4758; --md-sys-color-on-secondary-container: #dae2f9;
-    --md-sys-color-tertiary: #e0bddd; --md-sys-color-on-tertiary: #402843;
-    --md-sys-color-tertiary-container: #583e5a; --md-sys-color-on-tertiary-container: #fdd9fa;
-    --md-sys-color-error: #ffb4ab; --md-sys-color-on-error: #690005;
-    --md-sys-color-error-container: #93000a; --md-sys-color-on-error-container: #ffdad6;
-    --md-sys-color-background: #1a1c1e; --md-sys-color-on-background: #e3e2e6;
-    --md-sys-color-surface: #1a1c1e; --md-sys-color-on-surface: #e3e2e6;
-    --md-sys-color-surface-variant: #43474e; --md-sys-color-on-surface-variant: #c3c6cf;
-    --md-sys-color-outline: #8d9199; --md-sys-color-shadow: #000000;
-    --md-sys-color-inverse-surface: #e3e2e6; --md-sys-color-inverse-on-surface: #2f3033;
-    --md-sys-color-surface-container-high: rgba(227, 226, 230, 0.16);
-    --md-sys-color-success: #90ee90; --md-sys-color-success-container: rgba(144, 238, 144, 0.1);
-    --md-sys-color-warning: #ffcc80;
+    --md-sys-color-primary: #007aff; --md-sys-color-on-primary: #ffffff;
+    --md-sys-color-primary-container: rgba(255, 255, 255, 0.94); --md-sys-color-on-primary-container: #0f172a;
+    --md-sys-color-secondary: #1d1d1f; --md-sys-color-on-secondary: #ffffff;
+    --md-sys-color-secondary-container: rgba(118, 118, 128, 0.12); --md-sys-color-on-secondary-container: #1d1d1f;
+    --md-sys-color-tertiary: #0a84ff; --md-sys-color-on-tertiary: #ffffff;
+    --md-sys-color-tertiary-container: rgba(0, 122, 255, 0.10); --md-sys-color-on-tertiary-container: #005ecb;
+    --md-sys-color-error: #ff3b30; --md-sys-color-on-error: #ffffff;
+    --md-sys-color-error-container: rgba(255, 59, 48, 0.12); --md-sys-color-on-error-container: #b42318;
+    --md-sys-color-background: #f5f5f7; --md-sys-color-on-background: #1d1d1f;
+    --md-sys-color-surface: #f8f8fa; --md-sys-color-on-surface: #1d1d1f;
+    --md-sys-color-surface-variant: #f2f2f7; --md-sys-color-on-surface-variant: #6e6e73;
+    --md-sys-color-outline: rgba(60, 60, 67, 0.18); --md-sys-color-shadow: #000000;
+    --md-sys-color-inverse-surface: rgba(28, 28, 30, 0.92); --md-sys-color-inverse-on-surface: #ffffff;
+    --md-sys-color-surface-container-high: rgba(255, 255, 255, 0.76);
+    --md-sys-color-success: #34c759; --md-sys-color-success-container: rgba(52, 199, 89, 0.12);
+    --md-sys-color-warning: #ff9500;
     --panel-opacity: ${DEFAULT_SETTINGS.panelOpacity};
-    --toggle-size: ${56 * DEFAULT_SETTINGS.toggleSizeScale}px;
+    --toggle-size: ${TOGGLE_BASE_SIZE * DEFAULT_SETTINGS.toggleSizeScale}px;
     --toggle-opacity: ${DEFAULT_SETTINGS.toggleOpacity};
-    --md-ref-typeface-plain: 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --md-ref-typeface-plain: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
     --md-sys-typescale-body-large-font-family: var(--md-ref-typeface-plain);
-    --md-sys-typescale-body-large-font-size: 16px;
-    --md-sys-typescale-label-large-font-size: 14px;
-    --md-sys-typescale-label-medium-font-size: 12px;
-    --md-sys-typescale-label-small-font-size: 11px;
-    --md-sys-typescale-title-medium-font-size: 18px;
+    --md-sys-typescale-body-large-font-size: 13px;
+    --md-sys-typescale-label-large-font-size: 12.5px;
+    --md-sys-typescale-label-medium-font-size: 11.5px;
+    --md-sys-typescale-label-small-font-size: 10px;
+    --md-sys-typescale-title-medium-font-size: 15px;
 }
 
 .scrollable-container {
     position: relative;
     overflow-y: auto;
-    max-height: 70vh;
-    padding: 20px;
-    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
-    mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%);
-    
+    max-height: min(56vh, 480px);
+    padding: 4px 2px 8px;
+    -webkit-mask-image: linear-gradient(to bottom, black 0%, black 92%, transparent 100%);
+    mask-image: linear-gradient(to bottom, black 0%, black 92%, transparent 100%);
+
     scrollbar-width: none;
     -ms-overflow-style: none;
 }
@@ -239,11 +668,11 @@
 
 .mobile-block-ui { z-index: 2147483646 !important; touch-action: manipulation !important; font-family: var(--md-sys-typescale-body-large-font-family); box-sizing: border-box; position: fixed !important; visibility: visible !important; color: var(--md-sys-color-on-surface); -webkit-tap-highlight-color: transparent !important; }
 
-#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel {
-    background-color: rgba(40, 43, 48, var(--panel-opacity)) !important; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-    color: var(--md-sys-color-on-surface); border-radius: 20px !important;
-    box-shadow: 0 12px 17px 2px rgba(0,0,0,0.14), 0 5px 22px 4px rgba(0,0,0,0.12), 0 7px 8px -4px rgba(0,0,0,0.20) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12); padding: 18px 20px; width: calc(100% - 40px); max-width: 380px;
+#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel {
+    background-color: rgba(248, 248, 250, var(--panel-opacity)) !important; backdrop-filter: saturate(1.45) blur(20px); -webkit-backdrop-filter: saturate(1.45) blur(20px);
+    color: var(--md-sys-color-on-surface); border-radius: 18px !important;
+    box-shadow: 0 20px 55px rgba(0, 0, 0, 0.20), 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+    border: 1px solid rgba(255, 255, 255, 0.70); padding: 11px 12px; width: calc(100% - 48px); max-width: 326px;
     display: none;
     opacity: 0;
     backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden;
@@ -252,14 +681,14 @@
     cursor: grab;
 }
 
-#mobile-block-panel { bottom: 20px; left: 50%; transform: translateX(-50%) translateY(100px) scale(0.95); z-index: 2147483645 !important; }
-#mobile-settings-panel, #mobile-blocklist-panel { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.9); z-index: 2147483647 !important; max-width: 340px; max-height: 90vh;overflow-y: auto;}
+#mobile-block-panel { bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(100px) scale(0.95); z-index: 2147483645 !important; }
+#mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.94); z-index: 2147483647 !important; max-width: 326px; max-height: 78vh; overflow-y: auto; }
 
 #mobile-block-panel.visible {
     opacity: 1;
     transform: translateX(-50%) translateY(0) scale(1);
 }
-#mobile-settings-panel.visible, #mobile-blocklist-panel.visible {
+#mobile-settings-panel.visible, #mobile-blocklist-panel.visible, #mobile-inspector-panel.visible {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
 }
@@ -272,111 +701,179 @@
     transform: scale(1); /* Open state */
 }
 #mobile-settings-panel[data-was-dragged="true"],
-#mobile-blocklist-panel[data-was-dragged="true"] {
-    transform: scale(0.9); /* Closed state */
+#mobile-blocklist-panel[data-was-dragged="true"],
+#mobile-inspector-panel[data-was-dragged="true"] {
+    transform: scale(0.94); /* Closed state */
 }
 #mobile-settings-panel[data-was-dragged="true"].visible,
-#mobile-blocklist-panel[data-was-dragged="true"].visible {
+#mobile-blocklist-panel[data-was-dragged="true"].visible,
+#mobile-inspector-panel[data-was-dragged="true"].visible {
     transform: scale(1); /* Open state */
 }
 
-.mb-panel-title { font-size: var(--md-sys-typescale-title-medium-font-size); font-weight: 500; color: var(--md-sys-color-on-surface); text-align: center; margin: 0 0 24px 0; }
+.mb-panel-title { font-size: var(--md-sys-typescale-title-medium-font-size); font-weight: 700; color: var(--md-sys-color-on-surface); text-align: center; margin: 2px 0 12px 0; letter-spacing: 0; }
 
-.mb-slider { width: 100%; margin: 15px 0; -webkit-appearance: none; appearance: none; background: var(--md-sys-color-surface-variant); height: 5px; border-radius: 3px; outline: none; cursor: pointer; transition: background 0.3s ease; }
-.mb-slider:hover { background: var(--md-sys-color-outline); }
-.mb-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 22px; height: 22px; background: var(--md-sys-color-primary); border-radius: 50%; cursor: pointer; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transition: background 0.3s ease, box-shadow 0.3s ease; }
-.mb-slider::-moz-range-thumb { width: 22px; height: 22px; background: var(--md-sys-color-primary); border-radius: 50%; cursor: pointer; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.4); transition: background 0.3s ease, box-shadow 0.3s ease; }
+.mb-slider { width: 100%; margin: 10px 0; -webkit-appearance: none; appearance: none; background: rgba(120, 120, 128, 0.22); height: 4px; border-radius: 999px; outline: none; cursor: pointer; transition: background 0.2s ease; }
+.mb-slider:hover { background: rgba(120, 120, 128, 0.32); }
+.mb-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; background: #ffffff; border-radius: 50%; cursor: pointer; border: 0.5px solid rgba(60,60,67,0.18); box-shadow: 0 2px 8px rgba(0,0,0,0.20); transition: transform 0.2s ease, box-shadow 0.2s ease; }
+.mb-slider::-moz-range-thumb { width: 18px; height: 18px; background: #ffffff; border-radius: 50%; cursor: pointer; border: 0.5px solid rgba(60,60,67,0.18); box-shadow: 0 2px 8px rgba(0,0,0,0.20); transition: transform 0.2s ease, box-shadow 0.2s ease; }
 .mb-slider:active::-webkit-slider-thumb { box-shadow: 0 0 0 10px rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.25); }
 .mb-slider:active::-moz-range-thumb { box-shadow: 0 0 0 10px rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.25); }
 
-.selected-element {
-    outline: 3px solid var(--md-sys-color-error) !important;
+.mes-selected-element {
+    outline: 2px solid var(--md-sys-color-primary) !important;
     outline-offset: 2px;
-    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45) !important;
-    background-color: rgba(255, 82, 82, 0.15) !important;
+    box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28) !important;
+    background-color: rgba(0, 122, 255, 0.10) !important;
     z-index: 2147483644 !important;
     transition: background-color 0.1s ease, outline 0.1s ease, box-shadow 0.1s ease;
     pointer-events: none;
 }
 
 #mobile-block-toggleBtn {
-    z-index: 2147483646 !important; background-color: var(--md-sys-color-primary-container) !important; color: var(--md-sys-color-on-primary-container) !important;
-    opacity: var(--toggle-opacity) !important; width: var(--toggle-size) !important; height: var(--toggle-size) !important; border-radius: 18px !important; border: none !important; cursor: pointer !important;
-    box-shadow: 0 6px 10px 0 rgba(0,0,0,0.14), 0 1px 18px 0 rgba(0,0,0,0.12), 0 3px 5px -1px rgba(0,0,0,0.20) !important;
-    transition: background-color 0.3s ease, transform 0.2s ease, box-shadow 0.2s ease, opacity 0.3s ease, border 0.2s ease, top 0.3s ease, left 0.3s ease, bottom 0.3s ease, right 0.3s ease;
+    z-index: 2147483646 !important; background-color: rgba(255, 255, 255, 0.70) !important; color: rgba(60, 60, 67, 0.54) !important;
+    opacity: var(--toggle-opacity) !important; width: var(--toggle-size) !important; height: var(--toggle-size) !important; border-radius: 999px !important; border: 0.5px solid rgba(60, 60, 67, 0.16) !important; cursor: pointer !important;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.08) !important;
+    transition: background-color 0.2s ease, transform 0.16s ease, box-shadow 0.2s ease, opacity 0.2s ease, border 0.2s ease, top 0.2s ease, left 0.2s ease, bottom 0.2s ease, right 0.2s ease;
     display: flex !important; align-items: center !important; justify-content: center !important; overflow: hidden !important; backface-visibility: hidden; -webkit-backface-visibility: hidden; position: fixed !important; -webkit-tap-highlight-color: transparent !important;
 }
-#mobile-block-toggleBtn:active { transform: scale(0.95); box-shadow: 0 2px 4px -1px rgba(0,0,0,0.2), 0 4px 5px 0 rgba(0,0,0,0.14), 0 1px 10px 0 rgba(0,0,0,0.12) !important; }
+#mobile-block-toggleBtn:active { transform: scale(0.94); box-shadow: 0 5px 12px rgba(0,0,0,0.12) !important; }
 #mobile-block-toggleBtn.selecting {
-    background-color: var(--md-sys-color-primary) !important;
-    color: var(--md-sys-color-on-primary) !important;
-    box-shadow: 0 8px 10px 1px rgba(0,0,0,0.14), 0 3px 14px 2px rgba(0,0,0,0.12), 0 5px 5px -3px rgba(0,0,0,0.20) !important;
+    background-color: rgba(255, 255, 255, 0.78) !important;
+    color: rgba(60, 60, 67, 0.62) !important;
+    border-color: rgba(60, 60, 67, 0.22) !important;
+    box-shadow: 0 7px 16px rgba(0,0,0,0.12), 0 0 0 2px rgba(60, 60, 67, 0.08) !important;
 }
-#mobile-block-toggleBtn .toggle-icon { width: 55%; height: 55%; display: block; margin: auto; background-color: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
-#mobile-block-toggleBtn .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'); }
-#mobile-block-toggleBtn.selecting .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" height="24px" viewBox="0 0 24 24" width="24px" fill="currentColor"><path d="M0 0h24v24H0z" fill="none"/><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>'); }
-#mobile-block-toggleBtn .toggle-icon-adguard { background-image: url('${ADGUARD_LOGO_URL}'); background-size: contain; background-repeat: no-repeat; background-position: center; background-color: transparent !important; mask-image: none; -webkit-mask-image: none; width: 60%; height: 60%; }
+#mobile-block-toggleBtn.hidden-toggle { display: none !important; }
+#mobile-block-toggleBtn .toggle-icon { width: 46%; height: 46%; display: block; margin: auto; background-color: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
+#mobile-block-toggleBtn .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 5h6v6H5V5Zm8 0h6v6h-6V5ZM5 13h6v6H5v-6Zm8 0h6v6h-6v-6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 5h6v6H5V5Zm8 0h6v6h-6V5ZM5 13h6v6H5v-6Zm8 0h6v6h-6v-6Z"/></svg>'); }
+#mobile-block-toggleBtn.selecting .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 3h2v5h-2V3Zm0 13h2v5h-2v-5ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-4-2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 3h2v5h-2V3Zm0 13h2v5h-2v-5ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-4-2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>'); }
+#mobile-block-toggleBtn .toggle-icon-adguard { background-image: url('${ALT_TOGGLE_LOGO_URL}'); background-size: contain; background-repeat: no-repeat; background-position: center; background-color: transparent !important; mask-image: none; -webkit-mask-image: none; width: 60%; height: 60%; }
 
-.mb-btn { padding: 10px 24px; border: none; border-radius: 20px !important; font-size: var(--md-sys-typescale-label-large-font-size); font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease; text-align: center; box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3), 0 1px 3px 1px rgba(0,0,0,0.15); min-width: 64px; min-height: 40px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 1 !important; -webkit-tap-highlight-color: transparent !important; line-height: 1.5; display: inline-flex; align-items: center; justify-content: center; }
-.mb-btn:hover { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3), 0 2px 6px 2px rgba(0,0,0,0.15); }
+.mb-btn { padding: 7px 12px; border: 0.5px solid transparent; border-radius: 10px !important; font-size: var(--md-sys-typescale-label-large-font-size); font-weight: 600; cursor: pointer; transition: background-color 0.16s ease, transform 0.1s ease, box-shadow 0.16s ease, border-color 0.16s ease; text-align: center; box-shadow: none; min-width: 52px; min-height: 34px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 1 !important; -webkit-tap-highlight-color: transparent !important; line-height: 1.35; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0; }
+.mb-btn:hover { box-shadow: 0 1px 5px rgba(0,0,0,0.08); }
 .mb-btn:active { transform: scale(0.97); box-shadow: none; }
 .mb-btn.primary { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
 .mb-btn.primary:hover { background-color: #b0d3ff; } .mb-btn.primary:active { background-color: #c0daff; }
 .mb-btn.secondary { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
-.mb-btn.secondary:hover { background-color: #545d6e; } .mb-btn.secondary:active { background-color: #6a7385; }
+.mb-btn.secondary:hover { background-color: rgba(118,118,128,0.18); } .mb-btn.secondary:active { background-color: rgba(118,118,128,0.24); }
 .mb-btn.tertiary { background-color: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
-.mb-btn.tertiary:hover { background-color: #6f5471; } .mb-btn.tertiary:active { background-color: #866a89; }
+.mb-btn.tertiary:hover { background-color: rgba(0,122,255,0.16); } .mb-btn.tertiary:active { background-color: rgba(0,122,255,0.22); }
 .mb-btn.error { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
-.mb-btn.error:hover { background-color: #b12025; } .mb-btn.error:active { background-color: #c83c40; }
+.mb-btn.error:hover { background-color: rgba(255,59,48,0.18); } .mb-btn.error:active { background-color: rgba(255,59,48,0.22); }
 .mb-btn.surface { background-color: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface-variant); }
-.mb-btn.surface:hover { background-color: #53575e; } .mb-btn.surface:active { background-color: #63676e; }
+.mb-btn.surface:hover { background-color: rgba(118,118,128,0.18); } .mb-btn.surface:active { background-color: rgba(118,118,128,0.24); }
 .mb-btn.outline { background-color: transparent; color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline); box-shadow: none; }
 .mb-btn.outline:hover { background-color: rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.08); }
 .mb-btn.outline:active { background-color: rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.12); }
 
-.button-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 12px; margin-top: 24px; }
-#blocker-info-wrapper { margin-bottom: 15px; padding: 10px 14px; background-color: var(--md-sys-color-surface-variant); border-radius: 12px; border: 1px solid var(--md-sys-color-outline); }
-#blocker-info-label { display: block; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 6px; font-weight: 500; }
-#blocker-info { display: block; color: var(--md-sys-color-on-surface); font-size: var(--md-sys-typescale-label-large-font-size); line-height: 1.45; word-break: break-all; min-height: 1.45em; font-family: 'Consolas', 'Monaco', monospace; max-height: 6em; overflow-y: auto; }
+.button-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); gap: 8px; margin-top: 14px; }
+.primary-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.secondary-action-grid { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 0.5px solid rgba(60,60,67,0.12); }
+.secondary-action-grid.visible { display: grid; }
+.secondary-action-grid .mb-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-medium-font-size); }
+#blocker-info-wrapper { margin-bottom: 10px; padding: 9px 10px; background-color: rgba(118,118,128,0.10); border-radius: 12px; border: 0.5px solid rgba(60,60,67,0.08); }
+#blocker-info-label { display: block; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; font-weight: 600; }
+#blocker-info { display: block; color: var(--md-sys-color-on-surface); font-size: var(--md-sys-typescale-label-medium-font-size); line-height: 1.4; word-break: break-all; min-height: 1.4em; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; max-height: 4.2em; overflow-y: auto; }
 #blocker-info:empty::after { content: '없음'; color: var(--md-sys-color-on-surface-variant); font-style: italic; }
-label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 5px; margin-top: 10px; }
+#blocker-nav-label { min-height: 1.25em; margin-top: -4px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: center; }
+.element-nav-row { display: grid; grid-template-columns: 52px 1fr 52px; gap: 6px; align-items: center; margin-top: 6px; }
+.element-nav-row .mb-slider { margin: 0; }
+.nav-step-btn { min-width: 0; min-height: 30px; padding: 5px 7px; font-size: var(--md-sys-typescale-label-small-font-size); }
+#blocker-selector-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); }
+.selector-chip { display: inline-flex; align-items: center; min-height: 20px; padding: 1px 7px; border-radius: 999px; background-color: rgba(118,118,128,0.10); border: 0.5px solid rgba(60,60,67,0.08); }
+.selector-chip.unique { color: var(--md-sys-color-success); border-color: rgba(144, 238, 144, 0.35); }
+.selector-chip.warning { color: var(--md-sys-color-warning); border-color: rgba(255, 204, 128, 0.35); }
+.selector-chip.error { color: var(--md-sys-color-error); border-color: rgba(255, 180, 171, 0.35); }
+label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; margin-top: 8px; font-weight: 600; }
 
-.settings-item { margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
-.settings-item label { display: flex; justify-content: space-between; align-items: center; font-size: var(--md-sys-typescale-label-large-font-size); color: var(--md-sys-color-on-surface-variant); }
+.settings-layout { display: block; }
+.settings-item { margin: 0; padding: 8px 0; display: flex; flex-direction: column; gap: 6px; border-bottom: 0.5px solid rgba(60,60,67,0.10); }
+.settings-section-title { margin: 16px 0 4px; padding-top: 2px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); font-weight: 700; letter-spacing: 0; }
+.settings-section-title:first-child { margin-top: 0; }
+.settings-credit { margin-top: 8px; color: var(--md-sys-color-outline); font-size: 9px; font-weight: 500; text-align: center; letter-spacing: 0; opacity: 0.72; }
+.settings-item label { display: flex; justify-content: space-between; align-items: center; font-size: var(--md-sys-typescale-label-large-font-size); color: var(--md-sys-color-on-surface); min-height: 32px; }
 .settings-item label .settings-label-text { flex-grow: 1; margin-right: 10px; }
 .settings-value { color: var(--md-sys-color-on-surface); font-weight: 500; font-size: var(--md-sys-typescale-label-medium-font-size); padding-left: 10px; }
-#settings-toggle-site, #settings-adguard-logo, #settings-temp-disable { min-width: 70px; padding: 8px 14px; font-size: var(--md-sys-typescale-label-medium-font-size); flex-shrink: 0; }
-#settings-toggle-site.active, #settings-adguard-logo.active, #settings-temp-disable.active { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
-#settings-toggle-site:not(.active), #settings-adguard-logo:not(.active), #settings-temp-disable:not(.active) { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
-#settings-close, #settings-backup, #settings-restore { width: 100%; margin-top: 10px; }
+.mes-switch { width: 46px; min-width: 46px; height: 28px; min-height: 28px; padding: 2px !important; border-radius: 999px !important; background-color: rgba(118,118,128,0.18); border: 0.5px solid rgba(60,60,67,0.10); box-shadow: inset 0 0 0 0.5px rgba(60,60,67,0.06); flex-shrink: 0; justify-content: flex-start; font-size: 0; }
+.mes-switch .switch-knob { width: 24px; height: 24px; border-radius: 50%; background: #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.22); transform: translateX(0); transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.mes-switch.active { background-color: var(--md-sys-color-primary); border-color: transparent; }
+.mes-switch.active .switch-knob { transform: translateX(18px); }
+.mes-switch.error.active { background-color: var(--md-sys-color-error); }
+#settings-close, #settings-backup, #settings-restore { width: 100%; margin-top: 8px; }
 #settings-restore-input { display: none; }
 
-.corner-selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 5px; }
-.corner-btn { padding: 8px 12px; min-width: 60px; font-size: var(--md-sys-typescale-label-medium-font-size); }
-.corner-btn.active { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
-.corner-btn:not(.active) { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.launcher-mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
+.launcher-mode-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; background: transparent; color: var(--md-sys-color-on-surface-variant); }
+.launcher-mode-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
+.corner-selector-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
+.corner-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; }
+.corner-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
+.corner-btn:not(.active) { background-color: transparent; color: var(--md-sys-color-on-surface-variant); }
+.hide-strategy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
+.hide-strategy-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; }
+.hide-strategy-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
+.hide-strategy-btn:not(.active) { background-color: transparent; color: var(--md-sys-color-on-surface-variant); }
 
-#blocklist-container { max-height: calc(70vh - 150px); overflow-y: auto; margin: 20px 0; padding-right: 8px; display: flex; flex-direction: column; gap: 10px; }
-.blocklist-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; background-color: rgba(var(--md-sys-color-surface-variant-rgb, 67, 71, 78), 0.5); border-radius: 12px; border: 1px solid transparent; transition: background-color 0.2s, border-color 0.2s, opacity 0.3s ease, transform 0.3s ease; }
-.blocklist-item:hover { background-color: rgba(var(--md-sys-color-surface-variant-rgb, 67, 71, 78), 0.7); border-color: var(--md-sys-color-outline); }
+#blocklist-container { max-height: calc(70vh - 135px); overflow-y: auto; margin: 12px 0; padding-right: 4px; display: flex; flex-direction: column; gap: 8px; }
+#blocklist-summary { color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: center; margin-top: -4px; margin-bottom: 8px; }
+#blocklist-search { width: 100%; min-height: 34px; border: 0.5px solid rgba(60,60,67,0.12); border-radius: 10px; background-color: rgba(118,118,128,0.10); color: var(--md-sys-color-on-surface); padding: 6px 10px; box-sizing: border-box; font-size: var(--md-sys-typescale-label-large-font-size); outline: none; }
+#blocklist-search::placeholder { color: var(--md-sys-color-on-surface-variant); }
+.blocklist-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 10px; background-color: rgba(118,118,128,0.08); border-radius: 10px; border: 0.5px solid rgba(60,60,67,0.08); transition: background-color 0.2s, border-color 0.2s, opacity 0.3s ease, transform 0.3s ease; }
+.blocklist-item:hover { background-color: rgba(118,118,128,0.12); border-color: var(--md-sys-color-outline); }
 .blocklist-item span { flex: 1; word-break: break-all; margin-right: 12px; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); font-family: 'Consolas', 'Monaco', monospace; }
 .blocklist-controls { display: flex; gap: 6px; flex-shrink: 0; }
-.blocklist-btn { padding: 6px 10px; min-width: auto; min-height: 32px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 16px !important; }
+.blocklist-btn { padding: 5px 8px; min-width: auto; min-height: 28px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 9px !important; }
 .blocklist-btn-delete { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .blocklist-btn-copy { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
 #blocklist-empty { text-align:center; color: var(--md-sys-color-on-surface-variant); padding: 20px 0; }
 
+.inspector-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-bottom: 10px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
+.inspector-tab { min-width: 0; min-height: 30px; padding: 6px 4px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; color: var(--md-sys-color-on-surface-variant); background: transparent; }
+.inspector-tab.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
+#inspector-content { max-height: 54vh; overflow-y: auto; padding-right: 2px; color: var(--md-sys-color-on-surface); font-size: var(--md-sys-typescale-label-medium-font-size); line-height: 1.45; }
+.inspector-section { margin-bottom: 10px; padding: 9px 10px; background-color: rgba(118,118,128,0.08); border: 0.5px solid rgba(60,60,67,0.08); border-radius: 10px; }
+.inspector-section-title { margin: 0 0 7px 0; color: var(--md-sys-color-primary); font-size: var(--md-sys-typescale-label-medium-font-size); font-weight: 700; }
+.inspector-pre { margin: 0; white-space: pre-wrap; word-break: break-word; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); max-height: 32vh; overflow-y: auto; }
+.inspector-list { display: flex; flex-direction: column; gap: 8px; }
+.inspector-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid rgba(60,60,67,0.10); }
+.inspector-row:last-child { border-bottom: none; }
+.inspector-row span { word-break: break-word; }
+.inspector-mini-btn { padding: 4px 8px; min-height: 26px; min-width: auto; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 8px !important; }
+
 #mes-toast-container { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 2147483647 !important; display: flex; flex-direction: column-reverse; align-items: center; gap: 10px; pointer-events: none; width: max-content; max-width: 90%; }
-.mes-toast { background-color: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); padding: 14px 20px; border-radius: 8px; box-shadow: 0 3px 5px -1px rgba(0,0,0,0.2), 0 6px 10px 0 rgba(0,0,0,0.14), 0 1px 18px 0 rgba(0,0,0,0.12); font-size: var(--md-sys-typescale-label-large-font-size); opacity: 0; transform: translateY(20px); transition: opacity 0.3s ease, transform 0.3s ease, background-color 0.3s ease; pointer-events: all; max-width: 100%; text-align: center; }
+.mes-toast { background-color: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); padding: 10px 14px; border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.18); font-size: var(--md-sys-typescale-label-large-font-size); opacity: 0; transform: translateY(14px); transition: opacity 0.24s ease, transform 0.24s ease, background-color 0.24s ease; pointer-events: all; max-width: 100%; text-align: center; }
 .mes-toast.show { opacity: 1; transform: translateY(0); }
-.mes-toast.info { background-color: #333; color: white; }
+.mes-toast.info { background-color: rgba(28,28,30,0.92); color: white; }
 .mes-toast.success { background-color: var(--md-sys-color-success-container); color: var(--md-sys-color-success); }
 .mes-toast.error { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
-.mes-toast.warning { background-color: #4d3a00; color: var(--md-sys-color-warning); }
+.mes-toast.warning { background-color: rgba(255,149,0,0.14); color: #9a5a00; }
+
+@media (min-width: 700px) {
+    #mobile-block-panel { max-width: 424px; padding: 11px 12px; }
+    #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel { max-width: 500px; width: min(500px, calc(100% - 160px)); }
+    #mobile-inspector-panel { max-width: 560px; }
+    .button-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .primary-action-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .secondary-action-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .inspector-tabs { grid-template-columns: repeat(6, 1fr); }
+    #inspector-content { max-height: 62vh; }
+    .settings-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; align-items: start; }
+    .settings-layout .settings-section-title, .settings-layout .button-grid { grid-column: 1 / -1; }
+    .settings-layout .settings-item { margin-bottom: 14px; }
+    .settings-item label { font-size: var(--md-sys-typescale-body-large-font-size); }
+}
+
+@media (max-width: 380px) {
+    #mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel { width: calc(100% - 24px); padding: 11px 12px; border-radius: 16px !important; }
+    .button-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .mb-btn { padding: 9px 12px; min-width: 0; }
+    .inspector-tabs { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+}
     `;
 	document.head.appendChild(style);
 
-	let panel, settingsPanel, toggleBtn, listPanel, toastContainer;
+	let panel, settingsPanel, toggleBtn, listPanel, inspectorPanel, toastContainer;
 
 	function createUIElements() {
 		toastContainer = document.createElement('div');
@@ -391,16 +888,28 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             <div id="blocker-info-wrapper">
                 <span id="blocker-info-label">${STRINGS.selectedElementLabel}</span>
                 <div id="blocker-info"></div>
+                <div id="blocker-selector-meta"></div>
             </div>
             <label for="blocker-slider" style="display: block; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 5px;">${STRINGS.parentLevelLabel}</label>
-            <input type="range" id="blocker-slider" class="mb-slider" min="0" max="10" value="0" aria-label="Parent Level Selector">
-            <div class="button-grid">
-                <button id="blocker-copy" class="mb-btn secondary">${STRINGS.copy}</button>
+            <div class="element-nav-row">
+                <button id="blocker-parent" class="mb-btn surface nav-step-btn">${STRINGS.parent}</button>
+                <input type="range" id="blocker-slider" class="mb-slider" min="0" max="10" value="0" aria-label="Element hierarchy">
+                <button id="blocker-child" class="mb-btn surface nav-step-btn">${STRINGS.child}</button>
+            </div>
+            <div id="blocker-nav-label"></div>
+            <div class="primary-action-grid">
                 <button id="blocker-preview" class="mb-btn secondary">${STRINGS.preview}</button>
                 <button id="blocker-add-block" class="mb-btn primary">${STRINGS.saveRule}</button>
+                <button id="blocker-more" class="mb-btn tertiary">${STRINGS.more}</button>
+                <button id="blocker-cancel" class="mb-btn surface">${STRINGS.cancel}</button>
+            </div>
+            <div id="blocker-secondary-actions" class="secondary-action-grid">
+                <button id="blocker-copy-css" class="mb-btn secondary">${STRINGS.copyCss}</button>
+                <button id="blocker-copy-rule" class="mb-btn secondary">${STRINGS.copyRule}</button>
+                <button id="blocker-url" class="mb-btn secondary">${STRINGS.extractUrl}</button>
+                <button id="blocker-inspect" class="mb-btn tertiary">${STRINGS.inspect}</button>
                 <button id="blocker-list" class="mb-btn tertiary">${STRINGS.list}</button>
                 <button id="blocker-settings" class="mb-btn tertiary">${STRINGS.settings}</button>
-                <button id="blocker-cancel" class="mb-btn surface">${STRINGS.cancel}</button>
             </div>`;
 		document.body.appendChild(panel);
 
@@ -409,30 +918,101 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		listPanel.className = 'mobile-block-ui';
 		listPanel.innerHTML = `
             <h3 class="mb-panel-title">${STRINGS.listTitle}</h3>
+            <div id="blocklist-summary"></div>
+            <input id="blocklist-search" type="search" autocomplete="off" placeholder="${STRINGS.blocklistSearchPlaceholder}">
             <div id="blocklist-container"></div>
+            <div class="button-grid" style="margin-top: 12px; grid-template-columns: 1fr 1fr;">
+                <button id="blocklist-copy-site" class="mb-btn outline">${STRINGS.blocklistCopySite}</button>
+                <button id="blocklist-copy-all" class="mb-btn outline">${STRINGS.blocklistCopyAll}</button>
+                <button id="blocklist-delete-site" class="mb-btn error" style="grid-column: span 2;">${STRINGS.blocklistDeleteSite}</button>
+            </div>
             <button id="blocklist-close" class="mb-btn surface" style="width: 100%; margin-top: 15px;">${STRINGS.close}</button>`;
 		document.body.appendChild(listPanel);
+
+		inspectorPanel = document.createElement('div');
+		inspectorPanel.id = 'mobile-inspector-panel';
+		inspectorPanel.className = 'mobile-block-ui';
+		inspectorPanel.innerHTML = `
+            <h3 class="mb-panel-title">${STRINGS.inspectorTitle}</h3>
+            <div class="inspector-tabs">
+                <button class="mb-btn inspector-tab active" data-tab="element">요소</button>
+                <button class="mb-btn inspector-tab" data-tab="code">코드</button>
+                <button class="mb-btn inspector-tab" data-tab="page">페이지</button>
+                <button class="mb-btn inspector-tab" data-tab="cookies">쿠키</button>
+                <button class="mb-btn inspector-tab" data-tab="diagnostics">진단</button>
+                <button class="mb-btn inspector-tab" data-tab="resources">리소스</button>
+            </div>
+            <div id="inspector-content"></div>
+            <div class="button-grid" style="grid-template-columns: 1fr 1fr; margin-top: 12px;">
+                <button id="inspector-copy" class="mb-btn outline">${STRINGS.copyInfo}</button>
+                <button id="inspector-close" class="mb-btn surface">${STRINGS.close}</button>
+            </div>`;
+		document.body.appendChild(inspectorPanel);
 
 		settingsPanel = document.createElement('div');
 		settingsPanel.id = 'mobile-settings-panel';
 		settingsPanel.className = 'mobile-block-ui';
 		settingsPanel.innerHTML = `
             <h3 class="mb-panel-title">${STRINGS.settingsTitle}</h3>
-            <div class="scrollable-container" style="max-height: 65vh; overflow-y: auto;">
+            <div class="scrollable-container settings-layout" style="max-height: min(56vh, 480px); overflow-y: auto;">
+            <div class="settings-section-title">기본</div>
             <div class="settings-item">
                 <label><span class="settings-label-text">${STRINGS.includeSiteNameLabel}</span>
-                    <button id="settings-toggle-site" class="mb-btn ${settings.includeSiteName ? 'active' : ''}">${settings.includeSiteName ? STRINGS.on : STRINGS.off}</button>
+                    <button id="settings-toggle-site" class="mb-btn mes-switch ${settings.includeSiteName ? 'active' : ''}" role="switch" aria-checked="${settings.includeSiteName}" aria-label="${STRINGS.includeSiteNameLabel}"><span class="switch-knob"></span></button>
                 </label>
             </div>
             <div class="settings-item">
                 <label><span class="settings-label-text">${STRINGS.useAdguardLogoLabel}</span>
-                    <button id="settings-adguard-logo" class="mb-btn ${settings.showAdguardLogo ? 'active' : ''}">${settings.showAdguardLogo ? STRINGS.on : STRINGS.off}</button>
+                    <button id="settings-adguard-logo" class="mb-btn mes-switch ${settings.showAdguardLogo ? 'active' : ''}" role="switch" aria-checked="${settings.showAdguardLogo}" aria-label="${STRINGS.useAdguardLogoLabel}"><span class="switch-knob"></span></button>
                 </label>
             </div>
+            <div class="settings-section-title">차단</div>
              <div class="settings-item">
                 <label><span class="settings-label-text">${STRINGS.tempDisableLabel}</span>
-                    <button id="settings-temp-disable" class="mb-btn ${settings.tempBlockingDisabled ? 'active error' : 'secondary'}">${settings.tempBlockingDisabled ? STRINGS.on : STRINGS.off}</button>
+                    <button id="settings-temp-disable" class="mb-btn mes-switch ${settings.tempBlockingDisabled ? 'active error' : ''}" role="switch" aria-checked="${settings.tempBlockingDisabled}" aria-label="${STRINGS.tempDisableLabel}"><span class="switch-knob"></span></button>
                 </label>
+            </div>
+            <div class="settings-item">
+                <label><span class="settings-label-text">${STRINGS.observeDomChangesLabel}</span>
+                    <button id="settings-observe-dom" class="mb-btn mes-switch ${settings.observeDomChanges ? 'active' : ''}" role="switch" aria-checked="${settings.observeDomChanges}" aria-label="${STRINGS.observeDomChangesLabel}"><span class="switch-knob"></span></button>
+                </label>
+            </div>
+            <div class="settings-section-title">고급</div>
+            <div class="settings-item">
+                <label><span class="settings-label-text">${STRINGS.shadowDomSupportLabel}</span>
+                    <button id="settings-shadow-dom" class="mb-btn mes-switch ${settings.shadowDomSupport ? 'active' : ''}" role="switch" aria-checked="${settings.shadowDomSupport}" aria-label="${STRINGS.shadowDomSupportLabel}"><span class="switch-knob"></span></button>
+                </label>
+            </div>
+            <div class="settings-item">
+                <label><span class="settings-label-text">${STRINGS.selectorHintModeLabel}</span>
+                    <button id="settings-selector-hints" class="mb-btn mes-switch ${settings.selectorHintMode ? 'active' : ''}" role="switch" aria-checked="${settings.selectorHintMode}" aria-label="${STRINGS.selectorHintModeLabel}"><span class="switch-knob"></span></button>
+                </label>
+            </div>
+            <div class="settings-item">
+                <label><span class="settings-label-text">${STRINGS.privacyModeLabel}</span>
+                    <button id="settings-privacy-mode" class="mb-btn mes-switch ${settings.privacyMode ? 'active' : ''}" role="switch" aria-checked="${settings.privacyMode}" aria-label="${STRINGS.privacyModeLabel}"><span class="switch-knob"></span></button>
+                </label>
+            </div>
+            <div class="settings-item">
+                <label><span class="settings-label-text">${STRINGS.autoCloseAfterCopyLabel}</span>
+                    <button id="settings-auto-close" class="mb-btn mes-switch ${settings.autoCloseAfterCopy ? 'active' : ''}" role="switch" aria-checked="${settings.autoCloseAfterCopy}" aria-label="${STRINGS.autoCloseAfterCopyLabel}"><span class="switch-knob"></span></button>
+                </label>
+            </div>
+            <div class="settings-item">
+                 <label><span class="settings-label-text">${STRINGS.launcherModeLabel}</span></label>
+                 <div class="launcher-mode-grid">
+                     <button data-launcher-mode="button" class="mb-btn launcher-mode-btn">${STRINGS.launcherButton}</button>
+                     <button data-launcher-mode="gesture" class="mb-btn launcher-mode-btn">${STRINGS.launcherGesture}</button>
+                 </div>
+            </div>
+            <div class="settings-section-title">UI</div>
+            <div class="settings-item">
+                 <label><span class="settings-label-text">${STRINGS.hideStrategyLabel}</span></label>
+                 <div class="hide-strategy-grid">
+                     <button data-hide-strategy="display" class="mb-btn hide-strategy-btn">${STRINGS.hideStrategyDisplay}</button>
+                     <button data-hide-strategy="visibility" class="mb-btn hide-strategy-btn">${STRINGS.hideStrategyVisibility}</button>
+                     <button data-hide-strategy="opacity" class="mb-btn hide-strategy-btn">${STRINGS.hideStrategyOpacity}</button>
+                 </div>
             </div>
             <div class="settings-item">
                 <label for="settings-panel-opacity">
@@ -464,13 +1044,15 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                      <button id="corner-br" data-corner="bottom-right" class="mb-btn corner-btn">${STRINGS.posBottomRight}</button>
                  </div>
             </div>
+            <div class="settings-section-title">백업</div>
             <div class="button-grid" style="margin-top: 20px; grid-template-columns: 1fr 1fr;">
                  <button id="settings-backup" class="mb-btn outline">${STRINGS.backupLabel}</button>
                  <button id="settings-restore" class="mb-btn outline">${STRINGS.restoreLabel}</button>
                  <input type="file" id="settings-restore-input" accept=".json">
             </div>
             </div>
-            <button id="settings-close" class="mb-btn surface" style="width: 100%; margin-top: 20px;">${STRINGS.close}</button>`;
+            <button id="settings-close" class="mb-btn surface" style="width: 100%; margin-top: 20px;">${STRINGS.close}</button>
+            <div class="settings-credit">${STRINGS.settingsCredit}</div>`;
 		document.body.appendChild(settingsPanel);
 
 		toggleBtn = document.createElement('button');
@@ -532,7 +1114,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	async function loadBlockedSelectors() {
 		let stored = '[]';
 		try {
-			stored = await GM_getValue(BLOCKED_SELECTORS_KEY, '[]');
+			stored = await gmGetValue(BLOCKED_SELECTORS_KEY, '[]');
 			const parsed = JSON.parse(stored);
 			blockedSelectorsCache = Array.isArray(parsed) ? parsed : [];
 			console.log(SCRIPT_ID, `Loaded ${blockedSelectorsCache.length} rules from storage.`);
@@ -540,7 +1122,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		} catch (e) {
 			console.error(SCRIPT_ID, `Error parsing blocked selectors from key '${BLOCKED_SELECTORS_KEY}', resetting. Stored value:`, stored, e);
 			try {
-				await GM_setValue(BLOCKED_SELECTORS_KEY, '[]');
+				await gmSetValue(BLOCKED_SELECTORS_KEY, '[]');
 			} catch (resetError) {
 				console.error(SCRIPT_ID, "Failed to reset storage after parse error", resetError);
 			}
@@ -552,7 +1134,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	async function saveBlockedSelectors(list) {
 		const selectorsToSave = Array.isArray(list) ? list : [];
 		try {
-			await GM_setValue(BLOCKED_SELECTORS_KEY, JSON.stringify(selectorsToSave));
+			await gmSetValue(BLOCKED_SELECTORS_KEY, JSON.stringify(selectorsToSave));
 			blockedSelectorsCache = [...selectorsToSave];
 			console.log(SCRIPT_ID, `Saved ${selectorsToSave.length} rules.`);
 		} catch (e) {
@@ -561,7 +1143,56 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		}
 	}
 
-	const originalDisplayMap = new Map();
+	const originalStyleMap = new Map();
+	const hiddenElements = new Set();
+	let applyingBlocking = false;
+
+	function rememberOriginalStyles(el) {
+		if (!el || originalStyleMap.has(el)) return;
+		originalStyleMap.set(el, {
+			display: el.style.display || '',
+			visibility: el.style.visibility || '',
+			opacity: el.style.opacity || '',
+			pointerEvents: el.style.pointerEvents || ''
+		});
+	}
+
+	function applyHiddenStyle(el, strategy = settings.hideStrategy) {
+		if (!el) return;
+		rememberOriginalStyles(el);
+
+		if (strategy === 'visibility') {
+			el.style.removeProperty('display');
+			el.style.setProperty('visibility', 'hidden', 'important');
+			el.style.setProperty('pointer-events', 'none', 'important');
+		} else if (strategy === 'opacity') {
+			el.style.removeProperty('display');
+			el.style.setProperty('opacity', '0', 'important');
+			el.style.setProperty('pointer-events', 'none', 'important');
+		} else {
+			el.style.setProperty('display', 'none', 'important');
+		}
+
+		hiddenElements.add(el);
+	}
+
+	function restoreHiddenElement(el) {
+		if (!el) return;
+		const originalStyle = originalStyleMap.get(el) || {};
+		['display', 'visibility', 'opacity', 'pointerEvents'].forEach(prop => {
+			const cssProp = prop === 'pointerEvents' ? 'pointer-events' : prop;
+			const value = originalStyle[prop];
+			if (value) {
+				el.style.setProperty(cssProp, value, '');
+			} else {
+				el.style.removeProperty(cssProp);
+			}
+		});
+		el.removeAttribute('data-mes-hidden');
+		el.removeAttribute('data-mes-hide-strategy');
+		hiddenElements.delete(el);
+		originalStyleMap.delete(el);
+	}
 
 	async function applyBlocking(showToastNotification = false) {
 		if (settings.tempBlockingDisabled) {
@@ -569,80 +1200,75 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			disableAllBlocking(false);
 			return 0;
 		}
+		if (applyingBlocking) return 0;
+		applyingBlocking = true;
 
-		console.log(SCRIPT_ID, "Applying block rules...");
-		if (blockedSelectorsCache.length === 0) {
-			await loadBlockedSelectors();
-		}
-
-		let count = 0;
-		let appliedCount = 0;
-		const currentHostname = location.hostname;
-
-		blockedSelectorsCache.forEach(rule => {
-			if (typeof rule !== 'string' || !rule.includes('##')) {
-				console.warn(SCRIPT_ID, "Skipping invalid block rule format:", rule);
-				return;
+		try {
+			console.log(SCRIPT_ID, "Applying block rules...");
+			if (blockedSelectorsCache.length === 0) {
+				await loadBlockedSelectors();
 			}
 
-			const parts = rule.split('##');
-			const domain = parts[0];
-			const cssSelector = parts[1];
+			let count = 0;
+			let appliedCount = 0;
+			const currentHostname = location.hostname;
 
-			if (!cssSelector) {
-				console.warn(SCRIPT_ID, "Skipping rule with empty selector:", rule);
-				return;
-			}
-			if (domain && domain !== '*' && currentHostname !== domain) {
-				return;
-			}
+			blockedSelectorsCache.forEach(rule => {
+				const parts = getRuleParts(rule);
+				if (!parts) {
+					console.warn(SCRIPT_ID, "Skipping invalid block rule format:", rule);
+					return;
+				}
 
-			try {
-				const elements = document.querySelectorAll(cssSelector);
-				elements.forEach(el => {
-					const isHiddenByScript = el.style.display === 'none' && el.hasAttribute('data-mes-hidden');
-					const isNaturallyHidden = window.getComputedStyle(el).display === 'none';
+				const cssSelector = parts.selector;
 
-					if (!isHiddenByScript && !isNaturallyHidden) {
-						if (!originalDisplayMap.has(el)) {
-							originalDisplayMap.set(el, el.style.display || 'unset');
+				if (!cssSelector) {
+					console.warn(SCRIPT_ID, "Skipping rule with empty selector:", rule);
+					return;
+				}
+				if (!ruleAppliesToHost(rule, currentHostname)) {
+					return;
+				}
+
+				try {
+					const elements = querySelectorAllEverywhere(cssSelector);
+					elements.forEach(el => {
+						const isHiddenByScript = hiddenElements.has(el) || el.hasAttribute('data-mes-hidden');
+						const isNaturallyHidden = window.getComputedStyle(el).display === 'none';
+
+						if (!isHiddenByScript && !isNaturallyHidden) {
+							applyHiddenStyle(el);
+							count++;
+						} else if (isHiddenByScript) {
+							rememberOriginalStyles(el);
 						}
-						el.style.setProperty('display', 'none', 'important');
-						el.setAttribute('data-mes-hidden', 'true');
-						count++;
-					} else if (isHiddenByScript) {
-						if (!originalDisplayMap.has(el)) {
-							originalDisplayMap.set(el, 'unset');
-						}
-					}
-				});
-				if (elements.length > 0) appliedCount++;
+					});
+					if (elements.length > 0) appliedCount++;
 
-			} catch (e) {}
-		});
+				} catch (e) {}
+			});
 
-		if (count > 0) console.log(SCRIPT_ID, `Applied ${appliedCount} rules, hid ${count} new elements.`);
-		else console.log(SCRIPT_ID, `Applied ${appliedCount} rules, no new elements needed hiding.`);
+			if (count > 0) console.log(SCRIPT_ID, `Applied ${appliedCount} rules, hid ${count} new elements.`);
+			else console.log(SCRIPT_ID, `Applied ${appliedCount} rules, no new elements needed hiding.`);
 
-		if (showToastNotification && appliedCount > 0 && !settings.tempBlockingDisabled) {
-			showToast(STRINGS.blockingApplied(appliedCount), 'success', 2000);
+			if (showToastNotification && appliedCount > 0 && !settings.tempBlockingDisabled) {
+				showToast(STRINGS.blockingApplied(appliedCount), 'success', 2000);
+			}
+			return appliedCount;
+		} finally {
+			applyingBlocking = false;
 		}
-		return appliedCount;
 	}
 
 	function disableAllBlocking(showToastNotification = true) {
 		console.log(SCRIPT_ID, "Disabling all blocking rules temporarily...");
 		let restoredCount = 0;
-		document.querySelectorAll('[data-mes-hidden="true"]').forEach(el => {
-			const originalDisplay = originalDisplayMap.get(el);
-			if (originalDisplay === 'unset') {
-				el.style.removeProperty('display');
-			} else if (originalDisplay !== undefined) {
-				el.style.setProperty('display', originalDisplay, '');
-			} else {
-				el.style.removeProperty('display');
-			}
-			el.removeAttribute('data-mes-hidden');
+		const elementsToRestore = new Set([
+			...hiddenElements,
+			...querySelectorAllEverywhere('[data-mes-hidden="true"]')
+		]);
+		elementsToRestore.forEach(el => {
+			restoreHiddenElement(el);
 			restoredCount++;
 		});
 		console.log(SCRIPT_ID, `Restored display for ${restoredCount} elements.`);
@@ -673,17 +1299,26 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 	function generateSelector(el, maxDepth = 7, requireUnique = true) {
 		if (!el || el.nodeType !== 1 || el.closest('.mobile-block-ui')) return '';
+		const root = getSelectorRoot(el);
+		const tagName = el.tagName.toLowerCase();
 
 		if (el.id) {
 			const id = el.id;
-			const escapedId = CSS.escape(id);
-			if (!/^\d+$/.test(id) && id.length > 2 && !id.startsWith('ember') && !id.startsWith('react') && !id.includes(':')) {
+			const escapedId = cssEscape(id);
+			if (!/^\d+$/.test(id) && id.length > 2 && !DYNAMIC_TOKEN_RE.test(id) && !id.includes(':')) {
 				try {
-					if (document.querySelectorAll(`#${escapedId}`).length === 1) {
+					if (countSelectorMatches(`#${escapedId}`, root) === 1) {
 						return `#${escapedId}`;
 					}
 				} catch (e) {}
 			}
+		}
+
+		if (settings.selectorHintMode) {
+			const attrSelector = getBestAttributePart(el, tagName, root, requireUnique);
+			if (attrSelector) return attrSelector;
+			const broadHint = getBroadSelectorHint(el, tagName, root);
+			if (broadHint && (!requireUnique || countSelectorMatches(broadHint, root) === 1)) return broadHint;
 		}
 
 		const parts = [];
@@ -691,33 +1326,34 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		let depth = 0;
 
 		while (current && current.tagName && depth < maxDepth) {
-			const tagName = current.tagName.toLowerCase();
-			if (tagName === 'body' || tagName === 'html') break;
+			const currentTagName = current.tagName.toLowerCase();
+			if (currentTagName === 'body' || currentTagName === 'html') break;
 			if (current.closest('.mobile-block-ui')) {
-				current = current.parentElement;
+				current = getParentElement(current);
 				continue;
 			}
 
-			let part = tagName;
+			let part = currentTagName;
 			let addedSpecificity = false;
 
-			const stableClasses = Array.from(current.classList)
-				.filter(c => c && c.length > 2 &&
-					!/^[a-z]{1,2}$/i.test(c) &&
-					!/\d/.test(c) &&
-					!/active|select|focus|hover|disabled|open|closed|visible|hidden|js-|ui-/i.test(c) &&
-					!/^[A-Z0-9]{4,}$/.test(c) &&
-					!c.includes('--') && !c.includes('__') &&
-					!['selected-element', 'mobile-block-ui'].some(uiClass => c.includes(uiClass)))
-				.slice(0, 2);
+			if (settings.selectorHintMode) {
+				const attrPart = getBestAttributePart(current, currentTagName, root, false);
+				if (attrPart && (!requireUnique || countSelectorMatches(attrPart, root) === 1)) {
+					part = attrPart;
+					addedSpecificity = true;
+				}
+			}
+
+			const stableClasses = addedSpecificity ? [] : getStableClasses(current);
 
 			if (stableClasses.length > 0) {
-				part += '.' + stableClasses.map(c => CSS.escape(c)).join('.');
+				part += '.' + stableClasses.map(c => cssEscape(c)).join('.');
 				addedSpecificity = true;
 			}
 
-			if (!addedSpecificity || (current.parentElement && !current.parentElement.closest('.mobile-block-ui'))) {
-				const siblings = current.parentElement ? Array.from(current.parentElement.children) : [];
+			const parentElement = getSelectorParentElement(current, root);
+			if (!addedSpecificity || (parentElement && !parentElement.closest('.mobile-block-ui'))) {
+				const siblings = parentElement ? getChildElements(parentElement) : [];
 				const sameTagSiblings = siblings.filter(sib => sib.tagName === current.tagName && !sib.closest('.mobile-block-ui'));
 
 				if (sameTagSiblings.length > 1) {
@@ -734,14 +1370,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (requireUnique && parts.length > 0 && depth > 0) {
 				const tempSelector = parts.join(' > ');
 				try {
-					if (document.querySelectorAll(tempSelector).length === 1) {
+					if (countSelectorMatches(tempSelector, root) === 1) {
 						console.log(SCRIPT_ID, `Unique selector found early: ${tempSelector}`);
 						return tempSelector;
 					}
 				} catch (e) {}
 			}
 
-			current = current.parentElement;
+			current = getSelectorParentElement(current, root);
 			depth++;
 		}
 
@@ -749,15 +1385,16 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		if (requireUnique && finalSelector) {
 			try {
-				const matches = document.querySelectorAll(finalSelector);
-				if (matches.length !== 1) {
-					console.warn(SCRIPT_ID, `Generated selector "${finalSelector}" matches ${matches.length} elements. Trying parent recursively.`);
-					if (el.parentElement && !el.parentElement.closest('.mobile-block-ui') && maxDepth > 0) {
-						const parentSelector = generateSelector(el.parentElement, maxDepth - 1, false);
+				const matchCount = countSelectorMatches(finalSelector, root);
+				if (matchCount !== 1) {
+					console.warn(SCRIPT_ID, `Generated selector "${finalSelector}" matches ${matchCount} elements. Trying parent recursively.`);
+					const parentElement = getSelectorParentElement(el, root);
+					if (parentElement && !parentElement.closest('.mobile-block-ui') && maxDepth > 0) {
+						const parentSelector = generateSelector(parentElement, maxDepth - 1, false);
 						if (parentSelector) {
 							const combinedSelector = parentSelector + " > " + finalSelector;
 							try {
-								if (document.querySelectorAll(combinedSelector).length === 1) {
+								if (countSelectorMatches(combinedSelector, root) === 1) {
 									console.log(SCRIPT_ID, `Using combined unique selector: ${combinedSelector}`);
 									return combinedSelector;
 								} else {
@@ -782,24 +1419,86 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		return finalSelector;
 	}
 
+	function generateSimilarSelector(el) {
+		const selector = generateSelector(el, 7, false);
+		if (!selector) return '';
+		const simplified = selector
+			.replace(/:nth-of-type\(\d+\)/g, '')
+			.replace(/\s+>\s+/g, ' > ')
+			.trim();
+		return simplified || selector;
+	}
+
+	function getSelectorQuality(selector, el) {
+		const root = getSelectorRoot(el);
+		const matchCount = countSelectorMatches(selector, root);
+		let quality = 'error';
+		let text = '선택자 오류';
+
+		if (matchCount === 1) {
+			quality = 'unique';
+			text = '고유';
+		} else if (matchCount > 1) {
+			quality = 'warning';
+			text = `${matchCount}개 일치`;
+		} else if (matchCount === 0) {
+			text = '일치 없음';
+		}
+
+		if (isShadowRoot(root)) {
+			text += ' · Shadow DOM';
+		}
+
+		return {
+			matchCount,
+			quality,
+			text
+		};
+	}
+
 	function initRefsAndEvents() {
 		const infoLabel = panel.querySelector('#blocker-info-label');
 		const info = panel.querySelector('#blocker-info');
+		const selectorMeta = panel.querySelector('#blocker-selector-meta');
 		const slider = panel.querySelector('#blocker-slider');
-		const copyBtn = panel.querySelector('#blocker-copy');
+		const navLabel = panel.querySelector('#blocker-nav-label');
+		const parentBtn = panel.querySelector('#blocker-parent');
+		const childBtn = panel.querySelector('#blocker-child');
+		const moreBtn = panel.querySelector('#blocker-more');
+		const secondaryActions = panel.querySelector('#blocker-secondary-actions');
+		const copyCssBtn = panel.querySelector('#blocker-copy-css');
+		const copyRuleBtn = panel.querySelector('#blocker-copy-rule');
+		const urlBtn = panel.querySelector('#blocker-url');
 		const previewBtn = panel.querySelector('#blocker-preview');
 		const addBtn = panel.querySelector('#blocker-add-block');
+		const inspectBtn = panel.querySelector('#blocker-inspect');
 		const listBtn = panel.querySelector('#blocker-list');
 		const settingsBtn = panel.querySelector('#blocker-settings');
 		const cancelBtn = panel.querySelector('#blocker-cancel');
 
+		const listSummary = listPanel.querySelector('#blocklist-summary');
+		const listSearch = listPanel.querySelector('#blocklist-search');
 		const listContainer = listPanel.querySelector('#blocklist-container');
+		const listCopySite = listPanel.querySelector('#blocklist-copy-site');
+		const listCopyAll = listPanel.querySelector('#blocklist-copy-all');
+		const listDeleteSite = listPanel.querySelector('#blocklist-delete-site');
 		const listClose = listPanel.querySelector('#blocklist-close');
+
+		const inspectorContent = inspectorPanel.querySelector('#inspector-content');
+		const inspectorTabs = inspectorPanel.querySelectorAll('.inspector-tab');
+		const inspectorCopy = inspectorPanel.querySelector('#inspector-copy');
+		const inspectorClose = inspectorPanel.querySelector('#inspector-close');
 
 		const settingsClose = settingsPanel.querySelector('#settings-close');
 		const toggleSiteBtn = settingsPanel.querySelector('#settings-toggle-site');
 		const adguardLogoToggleBtn = settingsPanel.querySelector('#settings-adguard-logo');
 		const tempDisableBtn = settingsPanel.querySelector('#settings-temp-disable');
+		const observeDomBtn = settingsPanel.querySelector('#settings-observe-dom');
+		const shadowDomBtn = settingsPanel.querySelector('#settings-shadow-dom');
+		const selectorHintsBtn = settingsPanel.querySelector('#settings-selector-hints');
+		const privacyModeBtn = settingsPanel.querySelector('#settings-privacy-mode');
+		const autoCloseBtn = settingsPanel.querySelector('#settings-auto-close');
+		const launcherModeButtons = settingsPanel.querySelectorAll('.launcher-mode-btn');
 		const panelOpacitySlider = settingsPanel.querySelector('#settings-panel-opacity');
 		const panelOpacityValue = settingsPanel.querySelector('#opacity-value');
 		const toggleSizeSlider = settingsPanel.querySelector('#settings-toggle-size');
@@ -807,6 +1506,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		const toggleOpacitySlider = settingsPanel.querySelector('#settings-toggle-opacity');
 		const toggleOpacityValue = settingsPanel.querySelector('#toggle-opacity-value');
 		const cornerButtons = settingsPanel.querySelectorAll('.corner-btn');
+		const hideStrategyButtons = settingsPanel.querySelectorAll('.hide-strategy-btn');
 		const backupBtn = settingsPanel.querySelector('#settings-backup');
 		const restoreBtn = settingsPanel.querySelector('#settings-restore');
 		const restoreInput = settingsPanel.querySelector('#settings-restore-input');
@@ -816,25 +1516,21 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		function removeSelectionHighlight() {
 			if (selectedEl) {
-				selectedEl.classList.remove('selected-element');
+				clearSelectionHighlight(selectedEl);
 			}
 			selectedEl = null;
 			if (slider) slider.value = 0;
 			if (info) info.textContent = '';
+			if (selectorMeta) selectorMeta.innerHTML = '';
+			if (navLabel) navLabel.textContent = '';
 		}
 
 		function resetPreview() {
 			if (isPreviewHidden && previewedElement) {
 				try {
-					const originalDisplay = previewedElement.dataset._original_display;
-					if (originalDisplay === 'unset') {
-						previewedElement.style.removeProperty('display');
-					} else if (originalDisplay !== undefined) {
-						previewedElement.style.setProperty('display', originalDisplay, '');
-					}
-					delete previewedElement.dataset._original_display;
+					restoreHiddenElement(previewedElement);
 					if (previewedElement === selectedEl) {
-						previewedElement.classList.add('selected-element');
+						applySelectionHighlight(previewedElement);
 					}
 				} catch (e) {
 					console.warn(SCRIPT_ID, "Error resetting preview style:", e)
@@ -853,7 +1549,81 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (!info) return;
 			const selectorText = selectedEl ? generateSelector(selectedEl, 7, false) : '';
 			info.textContent = selectorText;
+			if (selectorMeta) {
+				selectorMeta.innerHTML = '';
+				if (selectedEl && selectorText) {
+					const quality = getSelectorQuality(selectorText, selectedEl);
+					const qualityChip = document.createElement('span');
+					qualityChip.className = `selector-chip ${quality.quality}`;
+					qualityChip.textContent = quality.text;
+					selectorMeta.appendChild(qualityChip);
+
+					const tagChip = document.createElement('span');
+					tagChip.className = 'selector-chip';
+					tagChip.textContent = selectedEl.tagName.toLowerCase();
+					selectorMeta.appendChild(tagChip);
+
+					const urlValue = findNearestUrl(selectedEl);
+					if (urlValue) {
+						const urlChip = document.createElement('span');
+						urlChip.className = 'selector-chip';
+						urlChip.textContent = 'URL 있음';
+						selectorMeta.appendChild(urlChip);
+					}
+				}
+			}
 			infoLabel.style.display = 'block';
+		}
+
+		function buildNavigationItems(originEl) {
+			if (!originEl) return [];
+			const parents = [];
+			let current = originEl;
+			while (current && current.nodeType === 1) {
+				parents.unshift(current);
+				const parent = getParentElement(current);
+				if (!parent || ['body', 'html'].includes(parent.tagName?.toLowerCase()) || parent.closest?.('.mobile-block-ui')) break;
+				current = parent;
+			}
+			const children = getChildElements(originEl);
+			return [...parents, ...children];
+		}
+
+		function getElementLabel(el, originEl) {
+			if (!el) return '';
+			const tag = el.tagName.toLowerCase();
+			const suffix = el.id ? `#${el.id}` : getStableClasses(el).length ? `.${getStableClasses(el).join('.')}` : '';
+			if (el === originEl) return `${STRINGS.navRoot}: ${tag}${suffix}`;
+			if (getParentElement(el) === originEl) return `${STRINGS.navChild}: ${tag}${suffix}`;
+			return `${STRINGS.navParent}: ${tag}${suffix}`;
+		}
+
+		function refreshNavigationSlider() {
+			if (!slider || !initialTouchedElement) {
+				if (navLabel) navLabel.textContent = '';
+				return;
+			}
+			const items = buildNavigationItems(initialTouchedElement);
+			const currentIndex = Math.max(0, items.indexOf(selectedEl));
+			slider.min = 0;
+			slider.max = Math.max(items.length - 1, 0);
+			slider.value = currentIndex;
+			if (navLabel) {
+				navLabel.textContent = items.length ? `${currentIndex + 1}/${items.length} · ${getElementLabel(items[currentIndex], initialTouchedElement)}` : '';
+			}
+		}
+
+		function selectElement(el, keepOrigin = false) {
+			if (!el || el.nodeType !== 1 || el.closest('.mobile-block-ui')) return;
+			removeSelectionHighlight();
+			resetPreview();
+			selectedEl = el;
+			if (!keepOrigin || !initialTouchedElement) {
+				initialTouchedElement = el;
+			}
+			applySelectionHighlight(selectedEl);
+			refreshNavigationSlider();
+			updateInfo();
 		}
 
 		let activePanel = null;
@@ -862,7 +1632,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (!panelElement) return;
 
 			if (visible) {
-				[panel, settingsPanel, listPanel].forEach(p => {
+				[panel, settingsPanel, listPanel, inspectorPanel].forEach(p => {
 					if (p && p !== panelElement && p.classList.contains('visible')) {
 						p.classList.remove('visible');
 						const transitionEndHandler = () => {
@@ -945,11 +1715,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				const arr = await loadBlockedSelectors();
 				console.log(`[showList] Rendering ${arr.length} rules.`);
 				listContainer.innerHTML = '';
+				const currentSiteRules = arr.filter(rule => ruleAppliesToHost(rule));
+				if (listSummary) {
+					listSummary.textContent = STRINGS.blocklistSummary(arr.length, currentSiteRules.length);
+				}
+				const filterText = (listSearch?.value || '').trim().toLowerCase();
+				const visibleRules = filterText ? arr.filter(rule => rule.toLowerCase().includes(filterText)) : arr;
 
 				if (arr.length === 0) {
 					listContainer.innerHTML = `<p id="blocklist-empty">${STRINGS.noRules}</p>`;
+				} else if (visibleRules.length === 0) {
+					listContainer.innerHTML = `<p id="blocklist-empty">${STRINGS.noMatchingRules}</p>`;
 				} else {
-					arr.forEach((rule, index) => {
+					visibleRules.forEach((rule, index) => {
 						const item = document.createElement('div');
 						item.className = 'blocklist-item';
 
@@ -965,11 +1743,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						copyButton.textContent = STRINGS.copy;
 						copyButton.title = '규칙 복사';
 						copyButton.addEventListener('click', () => {
-							try {
-								GM_setClipboard(rule);
+							if (copyToClipboard(rule)) {
 								showToast(STRINGS.ruleCopied, 'success', 2000);
-							} catch (copyError) {
-								console.error(SCRIPT_ID, "Error copying rule to clipboard:", copyError);
+							} else {
 								showToast(STRINGS.clipboardError, 'error');
 							}
 						});
@@ -989,11 +1765,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 									item.style.opacity = '0';
 									item.style.transform = 'translateX(20px) scale(0.95)';
 									setTimeout(async () => {
-										item.remove();
-										if (listContainer.childElementCount === 0) {
-											listContainer.innerHTML = `<p id="blocklist-empty">${STRINGS.noRules}</p>`;
-										}
+										disableAllBlocking(false);
 										await applyBlocking(false);
+										await showList();
 										showToast(STRINGS.ruleDeleted, 'info', 2000);
 									}, 300);
 
@@ -1052,6 +1826,270 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			requestAnimationFrame(updateMask);
 		}
 
+		function escapeHtml(value) {
+			return String(value ?? '').replace(/[&<>"']/g, char => ({
+				'&': '&amp;',
+				'<': '&lt;',
+				'>': '&gt;',
+				'"': '&quot;',
+				"'": '&#39;'
+			})[char]);
+		}
+
+		function formatElementSummary(el) {
+			if (!el) return '';
+			const selector = generateSelector(el, 7, false);
+			const quality = selector ? getSelectorQuality(selector, el) : null;
+			const similar = generateSimilarSelector(el);
+			const url = findNearestUrl(el);
+			const attrs = Array.from(el.attributes || [])
+				.filter(attr => !attr.name.startsWith('data-mes') && attr.value.length <= 200)
+				.slice(0, 20)
+				.map(attr => `${attr.name}="${attr.value}"`)
+				.join('\n');
+			return [
+				`태그: ${el.tagName.toLowerCase()}`,
+				selector ? `선택자: ${selector}` : '선택자: 없음',
+				quality ? `매칭: ${quality.text}` : '',
+				similar && similar !== selector ? `유사 선택자: ${similar}` : '',
+				url ? `URL: ${url}` : '',
+				attrs ? `속성:\n${attrs}` : ''
+			].filter(Boolean).join('\n');
+		}
+
+		function getFormattedOuterHtml(el) {
+			if (!el) return '';
+			const clone = el.cloneNode(true);
+			clone.classList?.remove(HIGHLIGHT_CLASS);
+			clone.querySelectorAll?.(`.${HIGHLIGHT_CLASS}, .mobile-block-ui`).forEach(node => node.remove());
+			const raw = clone.outerHTML || '';
+			let indent = 0;
+			let formatted = '';
+			raw.split(/(?=<)/).forEach(part => {
+				const trimmed = part.trim();
+				if (!trimmed) return;
+				if (trimmed.startsWith('</')) indent = Math.max(indent - 1, 0);
+				formatted += `${'  '.repeat(indent)}${trimmed}\n`;
+				if (/^<[^/!][^>]*[^/]>\s*$/.test(trimmed) && !/^<(area|base|br|col|embed|hr|img|input|link|meta|param|source|track|wbr)\b/i.test(trimmed)) {
+					indent++;
+				}
+			});
+			return formatted.trim();
+		}
+
+		function getComputedStyleSummary(el) {
+			if (!el) return '';
+			try {
+				const computed = window.getComputedStyle(el);
+				const props = ['display', 'position', 'z-index', 'width', 'height', 'margin', 'padding', 'background-color', 'color', 'font-size', 'line-height', 'overflow', 'opacity', 'visibility', 'pointer-events'];
+				return props.map(prop => `${prop}: ${computed.getPropertyValue(prop) || '(empty)'};`).join('\n');
+			} catch (e) {
+				return '';
+			}
+		}
+
+		function getInlineScriptHints(el) {
+			if (!el) return '인라인 이벤트 없음';
+			const hints = [];
+			Array.from(el.attributes || []).forEach(attr => {
+				if (attr.name.startsWith('on')) hints.push(`${attr.name}="${attr.value}"`);
+			});
+			const tokens = [el.id, ...Array.from(el.classList || [])].filter(token => token && token.length > 2 && !VOLATILE_CLASS_RE.test(token)).slice(0, 5);
+			if (tokens.length) {
+				const pattern = new RegExp(tokens.map(token => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'i');
+				Array.from(document.scripts).forEach((script, index) => {
+					if (!script.src && pattern.test(script.textContent || '')) {
+						hints.push(`inline script #${index + 1}: ${(script.textContent || '').trim().slice(0, 600)}`);
+					}
+				});
+			}
+			return hints.length ? hints.join('\n\n') : '인라인 이벤트 없음';
+		}
+
+		function getPageSourceSummary(type) {
+			if (type === 'css') {
+				let output = '접근 가능한 스타일시트만 표시됩니다.\n\n';
+				Array.from(document.styleSheets).slice(0, 30).forEach(sheet => {
+					try {
+						output += `/* ${sheet.href || 'inline'} */\n`;
+						Array.from(sheet.cssRules || []).slice(0, 80).forEach(rule => {
+							output += `${rule.cssText}\n`;
+						});
+						output += '\n';
+					} catch (e) {
+						output += `/* 접근 불가: ${sheet.href || 'inline'} */\n\n`;
+					}
+				});
+				return output.trim();
+			}
+			if (type === 'js') {
+				return Array.from(document.scripts).slice(0, 80).map((script, index) => {
+					return script.src ? `${index + 1}. ${script.src}` : `${index + 1}. inline script (${(script.textContent || '').length} chars)`;
+				}).join('\n') || '스크립트 없음';
+			}
+			const clone = document.documentElement.cloneNode(true);
+			clone.querySelectorAll('.mobile-block-ui, #mes-shadow-highlight-style').forEach(node => node.remove());
+			clone.querySelectorAll('style').forEach(node => {
+				if ((node.textContent || '').includes('--md-sys-color-primary') && (node.textContent || '').includes('#mobile-block-toggleBtn')) {
+					node.remove();
+				}
+			});
+			return clone.outerHTML.slice(0, 60000);
+		}
+
+		function safeDecode(value) {
+			try {
+				return decodeURIComponent(value);
+			} catch (e) {
+				return value;
+			}
+		}
+
+		function maskSensitiveValue(value) {
+			const text = String(value ?? '');
+			if (!settings.privacyMode) return text;
+			if (!text) return '';
+			if (text.length <= 8) return STRINGS.cookieValuesMasked;
+			return `${text.slice(0, 4)}...${text.slice(-3)} (${text.length}자)`;
+		}
+
+		function redactUrl(rawUrl) {
+			if (!settings.privacyMode) return rawUrl;
+			try {
+				const url = new URL(rawUrl, location.href);
+				if (url.search) url.search = '?redacted';
+				if (url.hash) url.hash = '';
+				return url.href;
+			} catch (e) {
+				return String(rawUrl || '').replace(/\?.*$/, '?redacted').replace(/#.*$/, '');
+			}
+		}
+
+		function getCookieRows() {
+			return document.cookie.split(';').map(cookie => cookie.trim()).filter(Boolean).map(cookie => {
+				const parts = cookie.split('=');
+				const value = safeDecode(parts.join('=') || '');
+				return {
+					name: parts.shift(),
+					value,
+					displayValue: maskSensitiveValue(value)
+				};
+			});
+		}
+
+		function formatResourceMetadata(entry) {
+			if (!entry) return '';
+			const lines = [
+				`URL: ${redactUrl(entry.name)}`,
+				`유형: ${entry.initiatorType || 'unknown'}`,
+				`시간: ${Math.round(entry.duration)}ms`,
+				`크기: ${Math.round(entry.transferSize || 0)} bytes`,
+				`시작: ${Math.round(entry.startTime)}ms`
+			];
+			if (!settings.privacyMode) {
+				lines.push(`원본 URL: ${entry.name}`);
+			}
+			return lines.join('\n');
+		}
+
+		function getDiagnosticsText() {
+			let webglInfo = 'WebGL 정보 없음';
+			try {
+				const canvas = document.createElement('canvas');
+				const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+				if (gl) {
+					const ext = gl.getExtension('WEBGL_debug_renderer_info');
+					webglInfo = ext ? `${gl.getParameter(ext.UNMASKED_VENDOR_WEBGL)} / ${gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)}` : 'WebGL 사용 가능';
+				}
+			} catch (e) {}
+
+			return [
+				`User Agent: ${navigator.userAgent}`,
+				`언어: ${navigator.language}`,
+				`시간대: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
+				`화면: ${screen.width}x${screen.height} / DPR ${devicePixelRatio}`,
+				`뷰포트: ${innerWidth}x${innerHeight}`,
+				`CPU 스레드: ${navigator.hardwareConcurrency || 'N/A'}`,
+				`메모리: ${navigator.deviceMemory || 'N/A'} GB`,
+				`WebGL: ${webglInfo}`,
+				`리소스 수: ${performance.getEntriesByType('resource').length}`
+			].join('\n');
+		}
+
+		let inspectorTab = 'element';
+		let inspectorTextSnapshot = '';
+
+		function renderInspector(tab = inspectorTab) {
+			inspectorTab = tab;
+			inspectorTabs.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+			if (!inspectorContent) return;
+			if (!selectedEl && ['element', 'code'].includes(tab)) {
+				inspectorContent.innerHTML = `<div class="inspector-section">${STRINGS.inspectorUnavailable}</div>`;
+				inspectorTextSnapshot = STRINGS.inspectorUnavailable;
+				return;
+			}
+
+			if (tab === 'element') {
+				const selector = selectedEl ? generateSelector(selectedEl, 7, true) : '';
+				const similar = selectedEl ? generateSimilarSelector(selectedEl) : '';
+				const children = selectedEl ? getChildElements(selectedEl) : [];
+				inspectorTextSnapshot = formatElementSummary(selectedEl);
+				inspectorContent.innerHTML = `
+                    <div class="inspector-section">
+                        <div class="inspector-section-title">요약</div>
+                        <pre class="inspector-pre">${escapeHtml(inspectorTextSnapshot)}</pre>
+                    </div>
+                    <div class="inspector-section">
+                        <div class="inspector-section-title">동작</div>
+                        <div class="inspector-list">
+                            <div class="inspector-row"><span>유사 선택자</span><button class="mb-btn inspector-mini-btn" data-inspector-action="copy-similar">복사</button></div>
+                            <div class="inspector-row"><span>상위 요소 선택</span><button class="mb-btn inspector-mini-btn" data-inspector-action="parent">상위</button></div>
+                            <div class="inspector-row"><span>하위 요소 ${children.length}개</span><button class="mb-btn inspector-mini-btn" data-inspector-action="children">보기</button></div>
+                        </div>
+                    </div>
+                    <div class="inspector-section">
+                        <div class="inspector-section-title">복사 후보</div>
+                        <pre class="inspector-pre">${escapeHtml([selector, similar && similar !== selector ? similar : ''].filter(Boolean).join('\n'))}</pre>
+                    </div>`;
+			} else if (tab === 'code') {
+				const html = getFormattedOuterHtml(selectedEl);
+				const css = getComputedStyleSummary(selectedEl);
+				const js = getInlineScriptHints(selectedEl);
+				inspectorTextSnapshot = `HTML\n${html}\n\nCSS\n${css}\n\nJS\n${js}`;
+				inspectorContent.innerHTML = `
+                    <div class="inspector-section"><div class="inspector-section-title">HTML</div><pre class="inspector-pre">${escapeHtml(html)}</pre></div>
+                    <div class="inspector-section"><div class="inspector-section-title">계산된 스타일</div><pre class="inspector-pre">${escapeHtml(css)}</pre></div>
+                    <div class="inspector-section"><div class="inspector-section-title">스크립트 단서</div><pre class="inspector-pre">${escapeHtml(js)}</pre></div>`;
+			} else if (tab === 'page') {
+				const html = getPageSourceSummary('html');
+				const css = getPageSourceSummary('css');
+				const js = getPageSourceSummary('js');
+				inspectorTextSnapshot = `HTML\n${html}\n\nCSS\n${css}\n\nJS\n${js}`;
+				inspectorContent.innerHTML = `
+                    <div class="inspector-section"><div class="inspector-section-title">HTML</div><pre class="inspector-pre">${escapeHtml(html)}</pre></div>
+                    <div class="inspector-section"><div class="inspector-section-title">CSS</div><pre class="inspector-pre">${escapeHtml(css)}</pre></div>
+                    <div class="inspector-section"><div class="inspector-section-title">JS</div><pre class="inspector-pre">${escapeHtml(js)}</pre></div>`;
+			} else if (tab === 'cookies') {
+				const rows = getCookieRows();
+				inspectorTextSnapshot = rows.map(row => `${row.name}=${row.displayValue}`).join('\n') || STRINGS.noCookies;
+				inspectorContent.innerHTML = rows.length ? `<div class="inspector-section"><div class="inspector-section-title">쿠키</div><pre class="inspector-pre">${escapeHtml(STRINGS.cookieReadOnly)}</pre><div class="inspector-list">${rows.map(row => `
+                    <div class="inspector-row">
+                        <span><strong>${escapeHtml(row.name)}</strong><br>${escapeHtml(row.displayValue)}</span>
+                    </div>`).join('')}</div></div>` : `<div class="inspector-section">${STRINGS.noCookies}</div>`;
+			} else if (tab === 'diagnostics') {
+				inspectorTextSnapshot = getDiagnosticsText();
+				inspectorContent.innerHTML = `<div class="inspector-section"><div class="inspector-section-title">브라우저 및 화면</div><pre class="inspector-pre">${escapeHtml(inspectorTextSnapshot)}</pre></div>`;
+			} else if (tab === 'resources') {
+				const resources = performance.getEntriesByType('resource').slice(-120).reverse();
+				inspectorTextSnapshot = resources.map(entry => `[${entry.initiatorType || 'unknown'}] ${Math.round(entry.duration)}ms ${redactUrl(entry.name)}`).join('\n');
+				inspectorContent.innerHTML = `<div class="inspector-section"><div class="inspector-section-title">최근 리소스</div><div class="inspector-list">${resources.map((entry, index) => `
+                    <div class="inspector-row">
+                        <span><strong>${escapeHtml(entry.initiatorType || 'unknown')}</strong> ${Math.round(entry.duration)}ms<br>${escapeHtml(redactUrl(entry.name))}</span>
+                        <button class="mb-btn inspector-mini-btn" data-resource-index="${index}">보기</button>
+                    </div>`).join('') || '리소스 없음'}</div></div>`;
+			}
+		}
+
 		function setBlockMode(enabled) {
 			if (!toggleBtn || !panel) return;
 
@@ -1062,19 +2100,58 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (enabled) {
 				setPanelVisibility(panel, true);
 				if (selectedEl) {
-					selectedEl.classList.add('selected-element');
+					applySelectionHighlight(selectedEl);
 				}
+				refreshNavigationSlider();
 				updateInfo();
 			} else {
 				setPanelVisibility(panel, false);
 				if (activePanel === listPanel) setPanelVisibility(listPanel, false);
 				if (activePanel === settingsPanel) setPanelVisibility(settingsPanel, false);
+				if (activePanel === inspectorPanel) setPanelVisibility(inspectorPanel, false);
 
 				removeSelectionHighlight();
 				resetPreview();
 				initialTouchedElement = null;
 			}
 			console.log(SCRIPT_ID, "Selection mode:", enabled ? "ON" : "OFF");
+		}
+
+		let domObserver = null;
+		let domObserverTimer = null;
+
+		function setupDomObserver() {
+			if (domObserver) {
+				domObserver.disconnect();
+				domObserver = null;
+			}
+			if (!settings.observeDomChanges || settings.tempBlockingDisabled) return;
+
+			domObserver = new MutationObserver((mutations) => {
+				if (applyingBlocking) return;
+				const hasPageChange = mutations.some(mutation => {
+					const target = mutation.target;
+					if (!target || target.nodeType !== 1 || target.closest?.('.mobile-block-ui')) return false;
+					return Array.from(mutation.addedNodes || []).some(node => node.nodeType === 1 && !node.closest?.('.mobile-block-ui'));
+				});
+				if (!hasPageChange) return;
+
+				clearTimeout(domObserverTimer);
+				domObserverTimer = setTimeout(() => {
+					if (typeof requestIdleCallback === 'function') {
+						requestIdleCallback(() => applyBlocking(false), {
+							timeout: 500
+						});
+					} else {
+						applyBlocking(false);
+					}
+				}, 120);
+			});
+
+			domObserver.observe(document.documentElement, {
+				childList: true,
+				subtree: true
+			});
 		}
 
 
@@ -1084,7 +2161,28 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			setBlockMode(!selecting);
 		});
 
-		copyBtn.addEventListener('click', () => {
+		parentBtn.addEventListener('click', () => {
+			const parent = getParentElement(selectedEl);
+			if (parent && !['body', 'html'].includes(parent.tagName.toLowerCase())) {
+				selectElement(parent, true);
+			}
+		});
+
+		childBtn.addEventListener('click', () => {
+			const children = getChildElements(selectedEl);
+			if (!children.length) {
+				showToast(STRINGS.noChildElements, 'info');
+				return;
+			}
+			selectElement(children[0], true);
+		});
+
+		moreBtn.addEventListener('click', () => {
+			secondaryActions.classList.toggle('visible');
+			moreBtn.classList.toggle('active', secondaryActions.classList.contains('visible'));
+		});
+
+		copyCssBtn.addEventListener('click', () => {
 			if (!selectedEl) {
 				showToast(STRINGS.noElementSelected, 'warning');
 				return;
@@ -1095,20 +2193,55 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				return;
 			}
 
-			let finalSelector = "##" + selector;
-			if (settings.includeSiteName) {
-				finalSelector = location.hostname + finalSelector;
-			}
-			try {
-				GM_setClipboard(finalSelector);
+			if (copyToClipboard(selector)) {
 				showToast(STRINGS.selectorCopied, 'success');
-			} catch (err) {
-				console.error(SCRIPT_ID, "Error copying to clipboard:", err);
+				if (settings.autoCloseAfterCopy) setBlockMode(false);
+			} else {
 				showToast(STRINGS.clipboardError, 'error');
-				try {
-					prompt(STRINGS.promptCopy, finalSelector);
-				} catch (e) {}
 			}
+		});
+
+		copyRuleBtn.addEventListener('click', () => {
+			if (!selectedEl) {
+				showToast(STRINGS.noElementSelected, 'warning');
+				return;
+			}
+			const selector = generateSelector(selectedEl, 7, true);
+			if (!selector) {
+				showToast(STRINGS.cannotGenerateSelector, 'error');
+				return;
+			}
+
+			const finalSelector = getRuleTextForSelector(selector);
+			if (copyToClipboard(finalSelector)) {
+				showToast(STRINGS.ruleCopied, 'success');
+				if (settings.autoCloseAfterCopy) setBlockMode(false);
+			} else {
+				showToast(STRINGS.clipboardError, 'error');
+			}
+		});
+
+		urlBtn.addEventListener('click', () => {
+			if (!selectedEl) {
+				showToast(STRINGS.noElementSelected, 'warning');
+				return;
+			}
+			const url = findNearestUrl(selectedEl);
+			if (!url) {
+				showToast(STRINGS.urlNotFound, 'info');
+				return;
+			}
+			if (copyToClipboard(url)) {
+				showToast(STRINGS.urlCopied, 'success');
+			} else {
+				showToast(STRINGS.clipboardError, 'error');
+			}
+		});
+
+		inspectBtn.addEventListener('click', () => {
+			renderInspector('element');
+			setPanelVisibility(panel, false);
+			setPanelVisibility(inspectorPanel, true);
 		});
 
 		previewBtn.addEventListener('click', () => {
@@ -1122,16 +2255,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					showToast(STRINGS.alreadyHidden, 'info');
 					return;
 				}
-				const currentDisplay = selectedEl.style.display;
-				selectedEl.dataset._original_display = currentDisplay === '' ? 'unset' : currentDisplay;
-				selectedEl.style.setProperty('display', 'none', 'important');
+				applyHiddenStyle(selectedEl);
 
 				previewBtn.textContent = STRINGS.restorePreview;
 				previewBtn.classList.remove('secondary');
 				previewBtn.classList.add('tertiary');
 				isPreviewHidden = true;
 				previewedElement = selectedEl;
-				selectedEl.classList.remove('selected-element');
+				clearSelectionHighlight(selectedEl);
 				console.log(SCRIPT_ID, "Previewing hide for:", selectedEl);
 
 			} else {
@@ -1158,21 +2289,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					showToast(STRINGS.cannotGenerateSelector, 'error');
 					return;
 				}
+				const selectorQuality = getSelectorQuality(selector, selectedEl);
+				if (selectorQuality.matchCount > 1 && !confirm(STRINGS.confirmBroadSelector(selectorQuality.matchCount))) {
+					return;
+				}
 
 				const result = await addBlockRule(selector);
 				console.log('[addBtn] addBlockRule result:', result);
 
 				if (result.success) {
 					showToast(STRINGS.ruleSavedReloading, 'success', 2000);
+					resetPreview();
 					try {
-						const ruleSelector = result.rule.split('##')[1];
-						document.querySelectorAll(ruleSelector).forEach(el => {
-							if (!originalDisplayMap.has(el)) {
-								originalDisplayMap.set(el, el.style.display || 'unset');
-							}
-							el.style.setProperty('display', 'none', 'important');
-							el.setAttribute('data-mes-hidden', 'true');
-						});
+						await applyBlocking(false);
 					} catch (applyError) {
 						console.error(SCRIPT_ID, "Error applying rule immediately after save:", applyError);
 						showToast(STRINGS.ruleSavedApplyFailed, 'warning', 3000);
@@ -1213,6 +2342,125 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 		});
 
+		listSearch.addEventListener('input', () => {
+			showList();
+		});
+
+		listCopySite.addEventListener('click', async () => {
+			const rules = (await loadBlockedSelectors()).filter(rule => ruleAppliesToHost(rule));
+			if (!rules.length) {
+				showToast(STRINGS.noRules, 'info');
+				return;
+			}
+			if (copyToClipboard(rules.join('\n'))) {
+				showToast(STRINGS.rulesCopied(rules.length), 'success');
+			} else {
+				showToast(STRINGS.clipboardError, 'error');
+			}
+		});
+
+		listCopyAll.addEventListener('click', async () => {
+			const rules = await loadBlockedSelectors();
+			if (!rules.length) {
+				showToast(STRINGS.noRules, 'info');
+				return;
+			}
+			if (copyToClipboard(rules.join('\n'))) {
+				showToast(STRINGS.rulesCopied(rules.length), 'success');
+			} else {
+				showToast(STRINGS.clipboardError, 'error');
+			}
+		});
+
+		listDeleteSite.addEventListener('click', async () => {
+			const rules = await loadBlockedSelectors();
+			const siteRules = rules.filter(rule => isSiteSpecificRuleForHost(rule));
+			if (!siteRules.length) {
+				showToast(STRINGS.noRules, 'info');
+				return;
+			}
+			if (!confirm(STRINGS.confirmDeleteSiteRules(location.hostname, siteRules.length))) return;
+			await saveBlockedSelectors(rules.filter(rule => !isSiteSpecificRuleForHost(rule)));
+			disableAllBlocking(false);
+			await applyBlocking(false);
+			await showList();
+			showToast(STRINGS.siteRulesDeleted(siteRules.length), 'info');
+		});
+
+		inspectorTabs.forEach(tabButton => {
+			tabButton.addEventListener('click', () => {
+				renderInspector(tabButton.dataset.tab);
+			});
+		});
+
+		inspectorCopy.addEventListener('click', () => {
+			const sensitiveTabs = new Set(['page', 'cookies', 'diagnostics', 'resources']);
+			if (sensitiveTabs.has(inspectorTab) && !confirm(STRINGS.sensitiveCopyConfirm)) {
+				return;
+			}
+			if (copyToClipboard(inspectorTextSnapshot || '')) {
+				showToast(STRINGS.infoCopied, 'success');
+			} else {
+				showToast(STRINGS.clipboardError, 'error');
+			}
+		});
+
+		inspectorClose.addEventListener('click', () => {
+			setPanelVisibility(inspectorPanel, false);
+			if (selecting) setPanelVisibility(panel, true);
+		});
+
+		inspectorContent.addEventListener('click', async (event) => {
+			const actionButton = event.target.closest('[data-inspector-action]');
+			if (actionButton) {
+				const action = actionButton.dataset.inspectorAction;
+				if (action === 'copy-similar') {
+					const similar = selectedEl ? generateSimilarSelector(selectedEl) : '';
+					if (similar && copyToClipboard(similar)) {
+						showToast(STRINGS.similarSelectorCopied, 'success');
+					} else {
+						showToast(STRINGS.cannotGenerateSelector, 'error');
+					}
+				} else if (action === 'parent') {
+					const parent = getParentElement(selectedEl);
+					if (parent && !['body', 'html'].includes(parent.tagName.toLowerCase())) {
+						selectElement(parent, true);
+						renderInspector('element');
+					}
+				} else if (action === 'children') {
+					const children = getChildElements(selectedEl);
+					inspectorTextSnapshot = children.map((child, index) => `${index + 1}. ${getElementLabel(child, selectedEl)}`).join('\n') || STRINGS.noChildElements;
+					inspectorContent.innerHTML = `<div class="inspector-section"><div class="inspector-section-title">하위 요소</div><div class="inspector-list">${children.map((child, index) => `
+                        <div class="inspector-row">
+                            <span>${escapeHtml(getElementLabel(child, selectedEl))}</span>
+                            <button class="mb-btn inspector-mini-btn" data-child-index="${index}">선택</button>
+                        </div>`).join('') || STRINGS.noChildElements}</div></div>`;
+					inspectorContent._mesChildList = children;
+				}
+				return;
+			}
+
+			const childButton = event.target.closest('[data-child-index]');
+			if (childButton && inspectorContent._mesChildList) {
+				const child = inspectorContent._mesChildList[parseInt(childButton.dataset.childIndex, 10)];
+				if (child) {
+					selectElement(child, true);
+					renderInspector('element');
+				}
+				return;
+			}
+
+			const resourceButton = event.target.closest('[data-resource-index]');
+			if (resourceButton) {
+				const resources = performance.getEntriesByType('resource').slice(-120).reverse();
+				const entry = resources[parseInt(resourceButton.dataset.resourceIndex, 10)];
+				if (!entry) return;
+				const text = formatResourceMetadata(entry);
+				inspectorTextSnapshot = text;
+				inspectorContent.innerHTML = `<div class="inspector-section"><div class="inspector-section-title">${STRINGS.resourceMetadataLabel}</div><pre class="inspector-pre">${escapeHtml(text)}</pre></div>`;
+			}
+		});
+
 		settingsClose.addEventListener('click', () => {
 			console.log('[settingsClose] Clicked');
 			setPanelVisibility(settingsPanel, false);
@@ -1222,18 +2470,32 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 		});
 
+		function updateSwitch(button, value) {
+			if (!button) return;
+			button.classList.toggle('active', value);
+			button.setAttribute('aria-checked', value ? 'true' : 'false');
+		}
+
+		function updateLauncherModeButtons() {
+			const mode = settings.hideToggleButton ? 'gesture' : 'button';
+			launcherModeButtons.forEach(button => {
+				button.classList.toggle('active', button.dataset.launcherMode === mode);
+			});
+			if (toggleBtn) {
+				toggleBtn.classList.toggle('hidden-toggle', settings.hideToggleButton);
+			}
+		}
+
 		toggleSiteBtn.addEventListener('click', async () => {
 			settings.includeSiteName = !settings.includeSiteName;
-			toggleSiteBtn.textContent = settings.includeSiteName ? STRINGS.on : STRINGS.off;
-			toggleSiteBtn.classList.toggle('active', settings.includeSiteName);
+			updateSwitch(toggleSiteBtn, settings.includeSiteName);
 			await saveSettings();
 			showToast(STRINGS.settingsSaved, 'info', 1500);
 		});
 
 		adguardLogoToggleBtn.addEventListener('click', async () => {
 			settings.showAdguardLogo = !settings.showAdguardLogo;
-			adguardLogoToggleBtn.textContent = settings.showAdguardLogo ? STRINGS.on : STRINGS.off;
-			adguardLogoToggleBtn.classList.toggle('active', settings.showAdguardLogo);
+			updateSwitch(adguardLogoToggleBtn, settings.showAdguardLogo);
 			updateToggleIcon();
 			await saveSettings();
 			showToast(STRINGS.settingsSaved, 'info', 1500);
@@ -1241,18 +2503,56 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		tempDisableBtn.addEventListener('click', async () => {
 			settings.tempBlockingDisabled = !settings.tempBlockingDisabled;
-			tempDisableBtn.textContent = settings.tempBlockingDisabled ? STRINGS.on : STRINGS.off;
-			tempDisableBtn.classList.toggle('active', settings.tempBlockingDisabled);
+			updateSwitch(tempDisableBtn, settings.tempBlockingDisabled);
 			tempDisableBtn.classList.toggle('error', settings.tempBlockingDisabled);
-			tempDisableBtn.classList.toggle('secondary', !settings.tempBlockingDisabled);
 
 			if (settings.tempBlockingDisabled) {
 				disableAllBlocking();
 			} else {
 				await enableAllBlocking();
 			}
+			setupDomObserver();
 			await saveSettings();
 		});
+
+		function bindBooleanSetting(button, key, afterChange) {
+			button.addEventListener('click', async () => {
+				settings[key] = !settings[key];
+				updateSwitch(button, settings[key]);
+				if (typeof afterChange === 'function') await afterChange(settings[key]);
+				await saveSettings();
+				showToast(STRINGS.settingsSaved, 'info', 1500);
+			});
+		}
+
+		bindBooleanSetting(observeDomBtn, 'observeDomChanges', () => {
+			setupDomObserver();
+		});
+		bindBooleanSetting(shadowDomBtn, 'shadowDomSupport', () => {
+			if (selectedEl) {
+				refreshNavigationSlider();
+				updateInfo();
+			}
+		});
+		bindBooleanSetting(selectorHintsBtn, 'selectorHintMode', () => {
+			if (selectedEl) updateInfo();
+		});
+		bindBooleanSetting(privacyModeBtn, 'privacyMode', () => {
+			renderInspector(inspectorTab);
+		});
+		bindBooleanSetting(autoCloseBtn, 'autoCloseAfterCopy');
+
+		launcherModeButtons.forEach(button => {
+			button.addEventListener('click', async () => {
+				const useGesture = button.dataset.launcherMode === 'gesture';
+				settings.hideToggleButton = useGesture;
+				settings.twoFingerGesture = useGesture;
+				updateLauncherModeButtons();
+				await saveSettings();
+				showToast(STRINGS.settingsSaved, 'info', 1500);
+			});
+		});
+		updateLauncherModeButtons();
 
 		const updateCornerButtons = (activeCorner) => {
 			cornerButtons.forEach(btn => {
@@ -1275,6 +2575,28 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		updateCornerButtons(settings.toggleBtnCorner);
 
+		const updateHideStrategyButtons = (activeStrategy) => {
+			hideStrategyButtons.forEach(btn => {
+				btn.classList.toggle('active', btn.dataset.hideStrategy === activeStrategy);
+			});
+		};
+
+		hideStrategyButtons.forEach(button => {
+			button.addEventListener('click', async () => {
+				const selectedStrategy = button.dataset.hideStrategy;
+				if (settings.hideStrategy !== selectedStrategy) {
+					settings.hideStrategy = selectedStrategy;
+					updateHideStrategyButtons(selectedStrategy);
+					disableAllBlocking(false);
+					await applyBlocking(false);
+					await saveSettings();
+					showToast(STRINGS.settingsSaved, 'info', 1500);
+				}
+			});
+		});
+
+		updateHideStrategyButtons(settings.hideStrategy);
+
 
 		let saveTimeout;
 		const debounceSaveSettings = () => {
@@ -1290,8 +2612,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			settings.panelOpacity = newValue;
 			panelOpacityValue.textContent = newValue.toFixed(2);
 			document.documentElement.style.setProperty('--panel-opacity', newValue);
-			document.querySelectorAll('#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel').forEach(p => {
-				p.style.setProperty('background-color', `rgba(40, 43, 48, ${newValue})`, 'important');
+			document.querySelectorAll('#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel').forEach(p => {
+				p.style.setProperty('background-color', `rgba(248, 248, 250, ${newValue})`, 'important');
 			});
 			debounceSaveSettings();
 		});
@@ -1300,7 +2622,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			const newValue = parseFloat(e.target.value);
 			settings.toggleSizeScale = newValue;
 			toggleSizeValue.textContent = newValue.toFixed(1) + 'x';
-			document.documentElement.style.setProperty('--toggle-size', `${56 * newValue}px`);
+			document.documentElement.style.setProperty('--toggle-size', `${TOGGLE_BASE_SIZE * newValue}px`);
 			if (toggleBtn) {
 				toggleBtn.style.setProperty('width', `var(--toggle-size)`, 'important');
 				toggleBtn.style.setProperty('height', `var(--toggle-size)`, 'important');
@@ -1323,10 +2645,15 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			try {
 				const rules = await loadBlockedSelectors();
 				if (rules.length === 0) {
-					showToast('ℹ️ 백업할 규칙이 없습니다.', 'info');
+					showToast(STRINGS.backupNoRules, 'info');
 					return;
 				}
-				const jsonString = JSON.stringify(rules, null, 2);
+				const jsonString = JSON.stringify({
+					version: '1.3.0',
+					exportedAt: new Date().toISOString(),
+					settings,
+					rules
+				}, null, 2);
 				const blob = new Blob([jsonString], {
 					type: 'application/json'
 				});
@@ -1358,27 +2685,61 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			reader.onload = async (e) => {
 				try {
 					const content = e.target.result;
-					const parsedRules = JSON.parse(content);
+					const parsedBackup = JSON.parse(content);
+					const parsedRules = Array.isArray(parsedBackup) ? parsedBackup : parsedBackup?.rules;
 
 					if (!Array.isArray(parsedRules) || !parsedRules.every(item => typeof item === 'string')) {
 						throw new Error("Invalid file content - expected an array of strings.");
 					}
-					if (!parsedRules.every(item => item.includes('##') || parsedRules.length === 0)) {
-						console.warn(SCRIPT_ID, "Restored rules contain items without '##'. Proceeding anyway.");
+					const normalized = normalizeRulesForStorage(parsedRules);
+					if (normalized.invalidCount > 0) {
+						console.warn(SCRIPT_ID, `Skipped ${normalized.invalidCount} invalid restored rules.`);
 					}
 
-					await saveBlockedSelectors(parsedRules);
+					await saveBlockedSelectors(normalized.rules);
+					if (parsedBackup && !Array.isArray(parsedBackup) && parsedBackup.settings && typeof parsedBackup.settings === 'object') {
+						settings = {
+							...DEFAULT_SETTINGS,
+							...settings,
+							...parsedBackup.settings
+						};
+						await saveSettings();
+						await loadSettings();
+						updateCSSVariables();
+						updateToggleIcon();
+						applyToggleBtnPosition();
+						updateHideStrategyButtons(settings.hideStrategy);
+						setupDomObserver();
+					}
+					disableAllBlocking(false);
 					await applyBlocking(true);
-					showToast(STRINGS.restoreSuccess, 'success', 2500);
+					showToast(normalized.duplicateCount > 0 ? STRINGS.restoreSuccessDeduped(normalized.duplicateCount) : STRINGS.restoreSuccess, 'success', 2500);
 
 					if (listPanel.classList.contains('visible')) {
 						await showList();
 					}
 					if (settingsPanel.classList.contains('visible')) {
-						tempDisableBtn.classList.toggle('active', settings.tempBlockingDisabled);
+						[
+							[toggleSiteBtn, settings.includeSiteName],
+							[adguardLogoToggleBtn, settings.showAdguardLogo],
+							[observeDomBtn, settings.observeDomChanges],
+							[shadowDomBtn, settings.shadowDomSupport],
+							[selectorHintsBtn, settings.selectorHintMode],
+							[privacyModeBtn, settings.privacyMode],
+							[autoCloseBtn, settings.autoCloseAfterCopy]
+						].forEach(([button, value]) => {
+							updateSwitch(button, value);
+						});
+						updateSwitch(tempDisableBtn, settings.tempBlockingDisabled);
 						tempDisableBtn.classList.toggle('error', settings.tempBlockingDisabled);
-						tempDisableBtn.classList.toggle('secondary', !settings.tempBlockingDisabled);
-						tempDisableBtn.textContent = settings.tempBlockingDisabled ? STRINGS.on : STRINGS.off;
+						updateLauncherModeButtons();
+						panelOpacitySlider.value = settings.panelOpacity;
+						panelOpacityValue.textContent = settings.panelOpacity.toFixed(2);
+						toggleSizeSlider.value = settings.toggleSizeScale;
+						toggleSizeValue.textContent = settings.toggleSizeScale.toFixed(1) + 'x';
+						toggleOpacitySlider.value = settings.toggleOpacity;
+						toggleOpacityValue.textContent = settings.toggleOpacity.toFixed(2);
+						updateCornerButtons(settings.toggleBtnCorner);
 					}
 
 				} catch (err) {
@@ -1404,7 +2765,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (!selecting) return;
 
 			if (e.target.closest('.mobile-block-ui')) {
-				initialTouchedElement = null;
 				return;
 			}
 
@@ -1413,7 +2773,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			touchStartY = touch.clientY;
 			touchMoved = false;
 
-			const potentialTarget = document.elementFromPoint(touchStartX, touchStartY);
+			const potentialTarget = getDeepElementFromPoint(touchStartX, touchStartY);
 			if (potentialTarget && !potentialTarget.closest('.mobile-block-ui') && potentialTarget.tagName !== 'BODY' && potentialTarget.tagName !== 'HTML') {
 				initialTouchedElement = potentialTarget;
 			} else {
@@ -1435,12 +2795,33 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (Math.sqrt(dx * dx + dy * dy) > moveThreshold) {
 				touchMoved = true;
 				if (selectedEl) {
-					selectedEl.classList.remove('selected-element');
+					clearSelectionHighlight(selectedEl);
 				}
 				initialTouchedElement = null;
 			}
 		}, {
 			passive: true
+		});
+
+		let lastTwoFingerTapAt = 0;
+		document.addEventListener('touchstart', e => {
+			if (!settings.twoFingerGesture || e.touches.length !== 2) return;
+			if (e.target.closest('.mobile-block-ui')) return;
+
+			const now = Date.now();
+			if (now - lastTwoFingerTapAt <= 520) {
+				try {
+					e.preventDefault();
+					e.stopImmediatePropagation();
+				} catch (err) {}
+				lastTwoFingerTapAt = 0;
+				setBlockMode(!selecting);
+			} else {
+				lastTwoFingerTapAt = now;
+			}
+		}, {
+			capture: true,
+			passive: false
 		});
 
 		document.addEventListener('touchend', e => {
@@ -1475,20 +2856,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 			let targetEl = initialTouchedElement;
 			if (!targetEl || targetEl.closest('.mobile-block-ui')) {
-				targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+				targetEl = getDeepElementFromPoint(touch.clientX, touch.clientY);
 			}
 			while (targetEl && (targetEl.nodeType !== 1 || targetEl.closest('.mobile-block-ui'))) {
-				targetEl = targetEl.parentElement;
+				targetEl = getParentElement(targetEl);
 			}
 
 			if (targetEl && targetEl.tagName !== 'BODY' && targetEl.tagName !== 'HTML') {
-				removeSelectionHighlight();
-				resetPreview();
-				selectedEl = targetEl;
-				initialTouchedElement = selectedEl;
-				selectedEl.classList.add('selected-element');
-				if (slider) slider.value = 0;
-				updateInfo();
+				selectElement(targetEl, false);
 			} else {
 				removeSelectionHighlight();
 				resetPreview();
@@ -1509,21 +2884,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				}
 			}
 			resetPreview();
-			const level = parseInt(e.target.value, 10);
-			let current = initialTouchedElement;
-			for (let i = 0; i < level && current.parentElement; i++) {
-				if (['body', 'html'].includes(current.parentElement.tagName.toLowerCase()) || current.parentElement.closest('.mobile-block-ui')) {
-					break;
-				}
-				current = current.parentElement;
-			}
-			if (selectedEl !== current) {
-				if (selectedEl) {
-					selectedEl.classList.remove('selected-element');
-				}
-				selectedEl = current;
-				selectedEl.classList.add('selected-element');
+			const items = buildNavigationItems(initialTouchedElement);
+			const next = items[parseInt(e.target.value, 10)];
+			if (next && selectedEl !== next) {
+				if (selectedEl) clearSelectionHighlight(selectedEl);
+				selectedEl = next;
+				applySelectionHighlight(selectedEl);
 				updateInfo();
+				refreshNavigationSlider();
 			}
 		});
 
@@ -1541,7 +2909,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					return;
 				}
 
-				const ignore = e.target.closest('button, input, select, textarea, .blocklist-item, .mb-slider, #blocker-info, #blocklist-container');
+				const ignore = e.target.closest('button, input, select, textarea, .blocklist-item, .mb-slider, #blocker-info, #blocklist-container, #inspector-content, .inspector-pre, .inspector-row');
 				if (ignore && el.contains(ignore)) return;
 
 				if (e.touches.length > 1) return;
@@ -1607,9 +2975,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		makePanelDraggable(panel);
 		makePanelDraggable(settingsPanel);
 		makePanelDraggable(listPanel);
+		makePanelDraggable(inspectorPanel);
 
 		const settingsScrollable = settingsPanel.querySelector('.scrollable-container');
 		if (settingsScrollable) applyGradientMask(settingsScrollable);
+		setupDomObserver();
 
 		console.log(SCRIPT_ID, 'Initialization complete.');
 	}
