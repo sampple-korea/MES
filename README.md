@@ -50,4 +50,4 @@ https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%2
 - MES is optimized for mobile layouts and touch interaction.
 - Some websites may block userscript behavior or rebuild hidden elements dynamically.
 - Back up your rule list before clearing browser storage or changing userscript managers.
-- The project is distributed under the MIT license.
+- The project is distributed under the Apache License, Version 2.0. Redistributions must preserve the attribution notices in `NOTICE`.
