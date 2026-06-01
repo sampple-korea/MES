@@ -1792,6 +1792,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	const adoptedStyleHandles = [];
 	let applyingBlocking = false;
 	let pendingBlockingApply = false;
+	let blockingGuardTimer = null;
+	let blockGuardInterval = null;
 
 	function rememberOriginalStyles(el) {
 		if (!el || originalStyleMap.has(el)) return;
@@ -1856,6 +1858,53 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		return 'display: none !important;';
 	}
 
+	function isHiddenElementStillSuppressed(el) {
+		if (!el?.isConnected) return true;
+		try {
+			const computed = window.getComputedStyle(el);
+			if (settings.hideStrategy === 'visibility') return computed.visibility === 'hidden';
+			if (settings.hideStrategy === 'opacity') return parseFloat(computed.opacity || '1') <= 0.01;
+			return computed.display === 'none';
+		} catch (e) {
+			return true;
+		}
+	}
+
+	function adoptedStyleHandlesIntact() {
+		return adoptedStyleHandles.every(({ root, sheet }) => {
+			try {
+				return Array.from(root?.adoptedStyleSheets || []).includes(sheet);
+			} catch (e) {
+				return false;
+			}
+		});
+	}
+
+	function styleRuleNodesIntact() {
+		return Array.from(styleRuleNodes).every(node => node?.isConnected && node.textContent.trim());
+	}
+
+	function blockingIntegrityNeedsRefresh() {
+		if (settings.tempBlockingDisabled || applyingBlocking) return false;
+		if (!blockedSelectorsCache.length && !hiddenElements.size && !styleRuleNodes.size && !adoptedStyleHandles.length) return false;
+		if (settings.hideStrategy === 'stylesheet') {
+			if (adoptedStyleHandles.length && !adoptedStyleHandlesIntact()) return true;
+			if (styleRuleNodes.size && !styleRuleNodesIntact()) return true;
+		}
+		pruneHiddenElementRefs();
+		return Array.from(hiddenElements).some(el => !isHiddenElementStillSuppressed(el));
+	}
+
+	function scheduleBlockingIntegrityCheck(delay = 90) {
+		if (blockingGuardTimer || settings.tempBlockingDisabled) return;
+		blockingGuardTimer = setTimeout(() => {
+			blockingGuardTimer = null;
+			if (blockingIntegrityNeedsRefresh()) {
+				applyBlocking(false);
+			}
+		}, delay);
+	}
+
 	function escapeCssRuleSelector(selector) {
 		return String(selector || '').trim();
 	}
@@ -1898,6 +1947,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		} catch (e) {
 			return [];
 		}
+	}
+
+	function nodeTouchesOwnedBlockStyle(node) {
+		if (!node) return false;
+		if (isMesOwnedStyleNode(node)) return true;
+		if (node.nodeType === Node.TEXT_NODE) return isMesOwnedStyleNode(node.parentNode);
+		return node.nodeType === 1 && !!node.querySelector?.(`style#${STYLE_BLOCK_ID}[${STYLE_BLOCK_OWNER_ATTR}="${STYLE_BLOCK_OWNER_VALUE}"]`);
 	}
 
 	function ensureBlockStyleNode(root = document) {
@@ -2107,7 +2163,12 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 							applyHiddenStyle(el);
 							count++;
 						} else if (isHiddenByScript) {
-							rememberOriginalStyles(el);
+							if (!isHiddenElementStillSuppressed(el)) {
+								applyHiddenStyle(el);
+								count++;
+							} else {
+								rememberOriginalStyles(el);
+							}
 						}
 					});
 					if (elements.length > 0) appliedCount++;
@@ -3602,6 +3663,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				domObserver.disconnect();
 				domObserver = null;
 			}
+			if (blockGuardInterval) {
+				clearInterval(blockGuardInterval);
+				blockGuardInterval = null;
+			}
 			observedMutationRoots = new WeakSet();
 			if (!settings.observeDomChanges || settings.tempBlockingDisabled) return;
 
@@ -3610,7 +3675,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				try {
 					domObserver.observe(root, {
 						childList: true,
-						subtree: true
+						subtree: true,
+						attributes: true,
+						attributeFilter: ['style'],
+						characterData: true
 					});
 					observedMutationRoots.add(root);
 				} catch (e) {}
@@ -3627,11 +3695,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					return;
 				}
 				let shouldRefreshRoots = false;
+				const hasBlockingTamper = mutations.some(mutation => {
+					if (mutation.type === 'attributes' && hiddenElements.has(mutation.target)) return true;
+					if (nodeTouchesOwnedBlockStyle(mutation.target)) return true;
+					return Array.from(mutation.removedNodes || []).some(nodeTouchesOwnedBlockStyle);
+				});
 				const hasPageChange = mutations.some(mutation => {
 					const target = mutation.target;
 					if (!target || isMesInternalNode(target)) return false;
 					return Array.from(mutation.addedNodes || []).some(node => node.nodeType === 1 && !isMesInternalNode(node));
 				});
+				if (hasBlockingTamper) {
+					scheduleBlockingIntegrityCheck(60);
+				}
 				if (!hasPageChange) return;
 				mutations.forEach(mutation => {
 					Array.from(mutation.addedNodes || []).forEach(node => {
@@ -3656,6 +3732,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 			observeRoot(document.documentElement);
 			observeOpenShadowRoots(document);
+			blockGuardInterval = setInterval(() => scheduleBlockingIntegrityCheck(0), 2500);
 		}
 
 

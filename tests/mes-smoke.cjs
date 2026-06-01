@@ -391,6 +391,55 @@ async function runAdvancedFlow(browser) {
   await context.close();
 }
 
+async function runBlockingGuardFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        .guard-ad, .inline-guard { min-height: 80px; margin: 12px; padding: 16px; background: #fff2d8; }
+      </style>
+    </head>
+    <body>
+      <section class="guard-ad">Stylesheet guarded target</section>
+      <section class="inline-guard">Inline guarded target</section>
+    </body>
+  </html>`;
+
+  const { context: stylesheetContext, page: stylesheetPage } = await openMesPage(
+    browser,
+    html,
+    { observeDomChanges: true, hideStrategy: 'stylesheet' },
+    { mobileBlockedSelectors_v2: ['mes.test##.guard-ad'] }
+  );
+  await stylesheetPage.waitForFunction(() => getComputedStyle(document.querySelector('.guard-ad')).display === 'none', null, { timeout: 5000 });
+  await stylesheetPage.evaluate(() => {
+    if (document.adoptedStyleSheets.length) {
+      document.adoptedStyleSheets = [];
+      return;
+    }
+    document.querySelectorAll('style#mes-rule-style[data-mes-style-owner="blocking"]').forEach(node => node.remove());
+  });
+  await stylesheetPage.waitForFunction(() => getComputedStyle(document.querySelector('.guard-ad')).display !== 'none', null, { timeout: 5000 });
+  await stylesheetPage.waitForFunction(() => getComputedStyle(document.querySelector('.guard-ad')).display === 'none', null, { timeout: 6000 });
+  await stylesheetContext.close();
+
+  const { context: inlineContext, page: inlinePage } = await openMesPage(
+    browser,
+    html,
+    { observeDomChanges: true, hideStrategy: 'display' },
+    { mobileBlockedSelectors_v2: ['mes.test##.inline-guard'] }
+  );
+  await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display === 'none', null, { timeout: 5000 });
+  await inlinePage.evaluate(() => {
+    document.querySelector('.inline-guard').style.setProperty('display', 'block', 'important');
+  });
+  await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display !== 'none', null, { timeout: 5000 });
+  await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display === 'none', null, { timeout: 5000 });
+  await inlineContext.close();
+}
+
 async function runLegacyImportFlow(browser) {
   const html = `<!doctype html>
   <html>
@@ -569,6 +618,7 @@ async function run() {
     await runMainFlow(browser);
     await runResponsiveClippingFlow(browser);
     await runAdvancedFlow(browser);
+    await runBlockingGuardFlow(browser);
     await runLegacyImportFlow(browser);
     await runSelectorCandidateFlow(browser);
   } finally {
