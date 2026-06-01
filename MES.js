@@ -116,6 +116,12 @@
 		selectorCandidateCopied: '선택자 후보 복사됨',
 		selectorCandidatePreview: (count) => `후보 ${count}개 요소 표시 중`,
 		selectorCandidateSaved: (count) => `후보 규칙 저장됨 · ${count}개 대상`,
+		selectorRiskStable: '안정',
+		selectorRiskPrecise: '정밀',
+		selectorRiskPositional: '위치 의존',
+		selectorRiskBroad: '넓음',
+		selectorRiskComplex: '복잡',
+		selectorRiskError: '확인 필요',
 		undoAction: '되돌리기',
 		ruleUndoComplete: '규칙 저장 취소됨',
 		ruleUndoUnavailable: '되돌릴 규칙이 없습니다.',
@@ -1165,6 +1171,9 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 .selector-chip.unique { color: var(--md-sys-color-success); border-color: rgba(144, 238, 144, 0.35); }
 .selector-chip.warning { color: var(--md-sys-color-warning); border-color: rgba(255, 204, 128, 0.35); }
 .selector-chip.error { color: var(--md-sys-color-error); border-color: rgba(255, 180, 171, 0.35); }
+.selector-chip.safe { color: var(--md-sys-color-success); border-color: rgba(52,199,89,0.32); }
+.selector-chip.caution { color: var(--md-sys-color-warning); border-color: rgba(255,149,0,0.32); }
+.selector-chip.broad { color: var(--md-sys-color-error); border-color: rgba(255,59,48,0.30); }
 label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; margin-top: 8px; font-weight: 600; }
 
 #mobile-block-panel.compact-picker { width: min(304px, calc(100% - 56px)); max-width: 304px; padding: 7px 8px; border-radius: 22px !important; }
@@ -1280,6 +1289,12 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .selector-candidate-title { font-weight: 700; color: var(--md-sys-color-on-surface); font-size: var(--md-sys-typescale-label-medium-font-size); }
 .selector-candidate-meta { color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: right; }
 .selector-candidate-selector { margin: 0; padding: 7px 8px; border-radius: 8px; background: rgba(118,118,128,0.08); color: var(--md-sys-color-on-surface-variant); font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; font-size: var(--md-sys-typescale-label-small-font-size); line-height: 1.35; white-space: pre-wrap; word-break: break-all; }
+.selector-candidate-analysis { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); line-height: 1.25; }
+.selector-risk { display: inline-flex; align-items: center; min-height: 18px; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-weight: 700; background: rgba(118,118,128,0.10); color: var(--md-sys-color-on-surface-variant); }
+.selector-risk.safe { color: var(--md-sys-color-success); background: rgba(52,199,89,0.10); }
+.selector-risk.caution { color: var(--md-sys-color-warning); background: rgba(255,149,0,0.10); }
+.selector-risk.broad, .selector-risk.error { color: var(--md-sys-color-error); background: rgba(255,59,48,0.10); }
+.selector-risk-reason { min-width: 0; flex: 1 1 120px; }
 .selector-candidate-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .selector-candidate-actions .mb-btn { min-height: 28px; padding: 5px 8px; font-size: var(--md-sys-typescale-label-small-font-size); }
 
@@ -2330,6 +2345,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (!cleanSelector || seen.has(cleanSelector)) return;
 			const quality = getSelectorQuality(cleanSelector, el);
 			if (quality.matchCount <= 0) return;
+			const risk = analyzeSelectorRisk(cleanSelector, el, quality);
 			seen.add(cleanSelector);
 			candidates.push({
 				label,
@@ -2337,7 +2353,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				intent,
 				matchCount: quality.matchCount,
 				quality: quality.quality,
-				qualityText: quality.text
+				qualityText: quality.text,
+				risk
 			});
 		};
 
@@ -2363,6 +2380,65 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		addCandidate('리소스', getResourceSelectorCandidate(el), 'URL 또는 미디어 속성 기반');
 
 		return candidates.slice(0, 6);
+	}
+
+	function analyzeSelectorRisk(selector, el, quality = null) {
+		const cleanSelector = typeof selector === 'string' ? selector.trim() : '';
+		const selectorQuality = quality || (cleanSelector && el ? getSelectorQuality(cleanSelector, el) : null);
+		const matchCount = selectorQuality?.matchCount ?? 0;
+		const hasStableAttr = /#[A-Za-z0-9_-]+|\[(?:data-testid|data-test|data-cy|aria-label|role|alt|title|href|src)[\^\$\*~|]?=/i.test(cleanSelector);
+		const hasPosition = /:nth-(?:of-type|child)\(/i.test(cleanSelector);
+		const childDepth = (cleanSelector.match(/>/g) || []).length;
+		const isComplex = cleanSelector.length > 180 || childDepth >= 5;
+		const hasSelectorError = selectorQuality?.quality === 'error';
+
+		if (!cleanSelector || matchCount === 0 || hasSelectorError) {
+			return {
+				level: 'error',
+				label: STRINGS.selectorRiskError,
+				reason: selectorQuality?.text || STRINGS.cannotGenerateSelector
+			};
+		}
+		if (matchCount >= 8) {
+			return {
+				level: 'broad',
+				label: STRINGS.selectorRiskBroad,
+				reason: `${matchCount}개 요소 영향. 저장 전 미리보기 권장`
+			};
+		}
+		if (matchCount > 1) {
+			return {
+				level: 'caution',
+				label: STRINGS.selectorRiskBroad,
+				reason: `${matchCount}개 요소를 함께 차단`
+			};
+		}
+		if (hasPosition) {
+			return {
+				level: 'caution',
+				label: STRINGS.selectorRiskPositional,
+				reason: '페이지 구조 변경에 약할 수 있음'
+			};
+		}
+		if (isComplex) {
+			return {
+				level: 'caution',
+				label: STRINGS.selectorRiskComplex,
+				reason: '긴 경로 기반이라 유지보수 주의'
+			};
+		}
+		if (hasStableAttr) {
+			return {
+				level: 'safe',
+				label: STRINGS.selectorRiskStable,
+				reason: '고정 속성 기반 단일 매칭'
+			};
+		}
+		return {
+			level: 'safe',
+			label: STRINGS.selectorRiskPrecise,
+			reason: '현재 요소 단일 매칭'
+		};
 	}
 
 	function getSelectorQuality(selector, el) {
@@ -2624,6 +2700,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					qualityChip.className = `selector-chip ${quality.quality}`;
 					qualityChip.textContent = quality.text;
 					selectorMeta.appendChild(qualityChip);
+
+					const risk = analyzeSelectorRisk(selectorText, selectedEl, quality);
+					const riskChip = document.createElement('span');
+					riskChip.className = `selector-chip ${risk.level}`;
+					riskChip.textContent = risk.label;
+					riskChip.title = risk.reason;
+					selectorMeta.appendChild(riskChip);
 
 					const tagChip = document.createElement('span');
 					tagChip.className = 'selector-chip';
@@ -3117,6 +3200,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (!el) return '';
 			const selector = generateElementSelector(el, 7, false);
 			const quality = selector ? getSelectorQuality(selector, el) : null;
+			const risk = selector ? analyzeSelectorRisk(selector, el, quality) : null;
 			const similar = generateSimilarSelector(el);
 			const url = findNearestUrl(el);
 			const attrs = Array.from(el.attributes || [])
@@ -3128,6 +3212,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				`태그: ${el.tagName.toLowerCase()}`,
 				selector ? `선택자: ${selector}` : '선택자: 없음',
 				quality ? `매칭: ${quality.text}` : '',
+				risk ? `품질: ${risk.label} - ${risk.reason}` : '',
 				similar && similar !== selector ? `유사 선택자: ${similar}` : '',
 				url ? `URL: ${url}` : '',
 				attrs ? `속성:\n${attrs}` : ''
@@ -3394,7 +3479,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				const elementSummary = formatElementSummary(selectedEl);
 				inspectorTextSnapshot = elementSummary;
 				if (selectorCandidates.length) {
-					inspectorTextSnapshot += `\n\n선택자 후보\n${selectorCandidates.map(candidate => `[${candidate.label}] ${candidate.selector} (${candidate.qualityText})`).join('\n')}`;
+					inspectorTextSnapshot += `\n\n선택자 후보\n${selectorCandidates.map(candidate => `[${candidate.label}] ${candidate.selector} (${candidate.qualityText} · ${candidate.risk.label} - ${candidate.risk.reason})`).join('\n')}`;
 				}
 				inspectorContent.innerHTML = `
                     <div class="inspector-section">
@@ -3419,10 +3504,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                                     <div class="selector-candidate-head">
                                         <span class="selector-candidate-title">${escapeHtml(candidate.label)}</span>
                                         <span class="selector-candidate-meta">${escapeHtml(candidate.qualityText)}</span>
-                                    </div>
-                                    <pre class="selector-candidate-selector">${escapeHtml(candidate.selector)}</pre>
-                                    <div class="selector-candidate-actions">
-                                        <button class="mb-btn surface" data-inspector-action="preview-candidate" data-candidate-index="${index}">보기</button>
+									</div>
+									<pre class="selector-candidate-selector">${escapeHtml(candidate.selector)}</pre>
+									<div class="selector-candidate-analysis">
+										<span class="selector-risk ${escapeHtml(candidate.risk.level)}">${escapeHtml(candidate.risk.label)}</span>
+										<span class="selector-risk-reason">${escapeHtml(candidate.risk.reason)}</span>
+									</div>
+									<div class="selector-candidate-actions">
+										<button class="mb-btn surface" data-inspector-action="preview-candidate" data-candidate-index="${index}">보기</button>
                                         <button class="mb-btn outline" data-inspector-action="copy-candidate" data-candidate-index="${index}">복사</button>
                                         <button class="mb-btn secondary" data-inspector-action="save-candidate" data-candidate-index="${index}">저장</button>
                                     </div>
