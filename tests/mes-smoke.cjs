@@ -3,7 +3,8 @@ const path = require('path');
 const { chromium } = require('playwright');
 
 const repoRoot = path.resolve(__dirname, '..');
-const scriptText = fs.readFileSync(path.join(repoRoot, 'MES.js'), 'utf8');
+const scriptFile = process.env.MES_SCRIPT_FILE || 'MES.js';
+const scriptText = fs.readFileSync(path.join(repoRoot, scriptFile), 'utf8');
 
 function buildLexicalGmScript(storage) {
   const serializedStorage = JSON.stringify(storage || {}).replace(/</g, '\\u003c');
@@ -185,6 +186,13 @@ async function runMainFlow(browser) {
 
   const importHiddenWithoutSource = await page.locator('#settings-legacy-import-item').evaluate(el => el.hidden);
   if (!importHiddenWithoutSource) throw new Error('legacy import menu should stay hidden without source data');
+
+  const lowPowerNotice = await page.locator('#settings-low-power-note').innerText();
+  if (!lowPowerNotice.includes('차단 성능')) throw new Error(`low power warning was not shown: ${lowPowerNotice}`);
+  await page.locator('#settings-low-power').click();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('mobileElementSelectorSettings_v1_2') || '{}').lowPowerMode === true, null, { timeout: 5000 });
+  const lowPowerSettings = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileElementSelectorSettings_v1_2')));
+  if (!lowPowerSettings.lowPowerMode) throw new Error(`low power mode was not saved: ${JSON.stringify(lowPowerSettings)}`);
 
   const gestureDetailHidden = await page.locator('#gesture-detail-settings').evaluate(el => !el.classList.contains('visible'));
   if (!gestureDetailHidden) throw new Error('gesture details should be hidden in button launcher mode');
@@ -711,6 +719,13 @@ async function runSelectorCandidateFlow(browser) {
   const candidateRiskTexts = await page.locator('.selector-candidate-analysis').evaluateAll(nodes => nodes.map(node => node.textContent || ''));
   if (!candidateRiskTexts.some(text => text.includes('넓음'))) {
     throw new Error(`broad selector risk was not shown: ${candidateRiskTexts.join(' | ')}`);
+  }
+  const candidateRows = await page.locator('.selector-candidate-row').evaluateAll(rows => rows.map(row => ({
+    title: row.querySelector('.selector-candidate-title')?.textContent || '',
+    selector: row.querySelector('.selector-candidate-selector')?.textContent || ''
+  })));
+  if (!candidateRows.some(row => row.title.includes('고급') && /sponsor|slot/i.test(row.selector))) {
+    throw new Error(`advanced block candidate was not shown: ${JSON.stringify(candidateRows)}`);
   }
   await page.locator('[data-inspector-action="preview-candidate"]').first().click();
   await page.waitForTimeout(150);
