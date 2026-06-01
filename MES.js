@@ -8,6 +8,7 @@
 // @grant        GM_setClipboard
 // @grant        GM_setValue
 // @grant        GM_getValue
+// @grant        GM_registerMenuCommand
 // @grant        GM.setClipboard
 // @grant        GM.setValue
 // @grant        GM.getValue
@@ -22,6 +23,8 @@
 	const HIGHLIGHT_CLASS = 'mes-selected-element';
 	const LEGACY_HIGHLIGHT_CLASS = 'selected-element';
 	const TOGGLE_BASE_SIZE = 34;
+	const TOGGLE_HITBOX_SIZE = 44;
+	const TOGGLE_MIN_VISUAL_SCALE = 0.85;
 	const ALT_TOGGLE_LOGO_URL = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Cpath fill=%22%23a0c9ff%22 d=%22M32 5 52 13v15c0 13.9-8.1 25.9-20 31C20.1 53.9 12 41.9 12 28V13l20-8Z%22/%3E%3Cpath fill=%22%2300325a%22 d=%22M22 25h20v6H22v-6Zm0 10h14v6H22v-6Z%22/%3E%3C/svg%3E';
 
 	const STRINGS = {
@@ -210,7 +213,7 @@
 			settings.panelOpacity = DEFAULT_SETTINGS.panelOpacity;
 		}
 		settings.toggleSizeScale = parseFloat(settings.toggleSizeScale);
-		if (isNaN(settings.toggleSizeScale) || settings.toggleSizeScale < 0.5 || settings.toggleSizeScale > 2.0) {
+		if (isNaN(settings.toggleSizeScale) || settings.toggleSizeScale < TOGGLE_MIN_VISUAL_SCALE || settings.toggleSizeScale > 2.0) {
 			settings.toggleSizeScale = DEFAULT_SETTINGS.toggleSizeScale;
 		}
 		settings.toggleOpacity = parseFloat(settings.toggleOpacity);
@@ -267,6 +270,7 @@
 	const VOLATILE_CLASS_RE = /active|select|selected|focus|hover|disabled|checked|open|closed|visible|hidden|loading|transition|animate|animating|enter|leave|js-|ui-|css-|style-/i;
 	const DYNAMIC_TOKEN_RE = /(?:^|[-_])(?:ember|react|vue|ng|svelte|random|hash|uuid|nonce|temp|tmp)(?:[-_]|$)|[a-f0-9]{7,}|[_-]?\d{3,}/i;
 	const BROAD_SELECTOR_HINT_RE = /(ad|ads|advert|banner|sponsor|promoted|promotion|popup|pop|modal|overlay|interstitial|notice|recommend|related|widget|slot|wing)/i;
+	const SHADOW_SELECTOR_RE = /^:mes-shadow\("([^"]+)"\)\s*>>>\s*(.+)$/;
 
 	function escapeAttributeValue(value) {
 		return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim();
@@ -341,14 +345,97 @@
 		return roots;
 	}
 
-	function querySelectorAllEverywhere(selector, preferredRoot = document) {
-		const results = [];
-		const seen = new Set();
+	function getQueryRoots(preferredRoot = document, rootCache = null) {
+		if (rootCache && preferredRoot === document) return rootCache;
 		const roots = [preferredRoot];
-
 		if (settings.shadowDomSupport && preferredRoot === document) {
 			roots.push(...collectOpenShadowRoots(document));
 		}
+		return roots;
+	}
+
+	function encodeShadowSelectorPath(hostSelectors) {
+		return hostSelectors.map(selector => encodeURIComponent(selector)).join('|');
+	}
+
+	function parseShadowScopedSelector(selector) {
+		const match = typeof selector === 'string' ? selector.match(SHADOW_SELECTOR_RE) : null;
+		if (!match) return null;
+		const hostSelectors = match[1]
+			.split('|')
+			.map(part => {
+				try {
+					return decodeURIComponent(part);
+				} catch (e) {
+					return '';
+				}
+			})
+			.filter(Boolean);
+		const localSelector = match[2]?.trim();
+		if (!hostSelectors.length || !localSelector) return null;
+		return {
+			hostSelectors,
+			localSelector
+		};
+	}
+
+	function getShadowHostChain(el) {
+		if (!settings.shadowDomSupport || !el || typeof el.getRootNode !== 'function') return [];
+		const chain = [];
+		let root = el.getRootNode();
+		while (isShadowRoot(root) && root.host) {
+			chain.unshift(root.host);
+			root = typeof root.host.getRootNode === 'function' ? root.host.getRootNode() : document;
+		}
+		return chain;
+	}
+
+	function createShadowScopedSelector(el, localSelector) {
+		const hosts = getShadowHostChain(el);
+		if (!hosts.length || !localSelector) return localSelector;
+		const hostSelectors = hosts.map(host => generateSelector(host, 7, true)).filter(Boolean);
+		if (hostSelectors.length !== hosts.length) return localSelector;
+		return `:mes-shadow("${encodeShadowSelectorPath(hostSelectors)}") >>> ${localSelector}`;
+	}
+
+	function queryShadowScopedSelector(selector) {
+		const parsed = parseShadowScopedSelector(selector);
+		if (!parsed) return [];
+		let roots = [document];
+		parsed.hostSelectors.forEach(hostSelector => {
+			const nextRoots = [];
+			roots.forEach(root => {
+				try {
+					root.querySelectorAll(hostSelector).forEach(host => {
+						if (host.shadowRoot && !host.closest?.('.mobile-block-ui')) {
+							nextRoots.push(host.shadowRoot);
+						}
+					});
+				} catch (e) {}
+			});
+			roots = nextRoots;
+		});
+		const results = [];
+		const seen = new Set();
+		roots.forEach(root => {
+			try {
+				root.querySelectorAll(parsed.localSelector).forEach(el => {
+					if (!seen.has(el) && !el.closest?.('.mobile-block-ui')) {
+						seen.add(el);
+						results.push(el);
+					}
+				});
+			} catch (e) {}
+		});
+		return results;
+	}
+
+	function querySelectorAllEverywhere(selector, preferredRoot = document, rootCache = null) {
+		const shadowScoped = parseShadowScopedSelector(selector);
+		if (shadowScoped) return queryShadowScopedSelector(selector);
+		const results = [];
+		const seen = new Set();
+		const roots = getQueryRoots(preferredRoot, rootCache);
 
 		roots.forEach(root => {
 			if (results.length >= 600) return;
@@ -372,6 +459,27 @@
 			return querySelectorAllEverywhere(selector, root).length;
 		} catch (e) {
 			return -1;
+		}
+	}
+
+	function registerRecoveryCommand() {
+		const registerMenuCommand = globalThis.GM_registerMenuCommand || globalThis.GM?.registerMenuCommand;
+		if (typeof registerMenuCommand !== 'function') return;
+		try {
+			registerMenuCommand('MES 버튼 모드로 복구', async () => {
+				settings.hideToggleButton = false;
+				settings.twoFingerGesture = false;
+				await saveSettings();
+				updateCSSVariables();
+				updateToggleIcon();
+				applyToggleBtnPosition();
+				if (typeof updateLauncherModeButtons === 'function') {
+					updateLauncherModeButtons();
+				}
+				showToast(STRINGS.settingsSaved, 'info', 1500);
+			});
+		} catch (e) {
+			console.warn(SCRIPT_ID, 'Menu command registration failed:', e);
 		}
 	}
 
@@ -575,14 +683,15 @@
 	function updateCSSVariables() {
 		document.documentElement.style.setProperty('--panel-opacity', settings.panelOpacity);
 		document.documentElement.style.setProperty('--toggle-size', `${TOGGLE_BASE_SIZE * settings.toggleSizeScale}px`);
+		document.documentElement.style.setProperty('--toggle-hitbox-size', `${TOGGLE_HITBOX_SIZE}px`);
 		document.documentElement.style.setProperty('--toggle-opacity', settings.toggleOpacity);
 
 		document.querySelectorAll('#mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel').forEach(p => {
 			p.style.setProperty('background-color', `rgba(248, 248, 250, ${settings.panelOpacity})`, 'important');
 		});
 		if (toggleBtn) {
-			toggleBtn.style.setProperty('width', `var(--toggle-size)`, 'important');
-			toggleBtn.style.setProperty('height', `var(--toggle-size)`, 'important');
+			toggleBtn.style.setProperty('width', `var(--toggle-hitbox-size)`, 'important');
+			toggleBtn.style.setProperty('height', `var(--toggle-hitbox-size)`, 'important');
 			toggleBtn.style.setProperty('opacity', `var(--toggle-opacity)`, 'important');
 			toggleBtn.classList.toggle('hidden-toggle', settings.hideToggleButton);
 		}
@@ -597,25 +706,29 @@
 		toggleBtn.style.right = 'auto';
 		toggleBtn.style.transform = '';
 
-		const margin = '20px';
+		const margin = '16px';
+		const topInset = `calc(env(safe-area-inset-top, 0px) + ${margin})`;
+		const rightInset = `calc(env(safe-area-inset-right, 0px) + ${margin})`;
+		const bottomInset = `calc(env(safe-area-inset-bottom, 0px) + ${margin})`;
+		const leftInset = `calc(env(safe-area-inset-left, 0px) + ${margin})`;
 
 		switch (settings.toggleBtnCorner) {
 			case 'top-left':
-				toggleBtn.style.top = margin;
-				toggleBtn.style.left = margin;
+				toggleBtn.style.top = topInset;
+				toggleBtn.style.left = leftInset;
 				break;
 			case 'top-right':
-				toggleBtn.style.top = margin;
-				toggleBtn.style.right = margin;
+				toggleBtn.style.top = topInset;
+				toggleBtn.style.right = rightInset;
 				break;
 			case 'bottom-left':
-				toggleBtn.style.bottom = margin;
-				toggleBtn.style.left = margin;
+				toggleBtn.style.bottom = bottomInset;
+				toggleBtn.style.left = leftInset;
 				break;
 			case 'bottom-right':
 			default:
-				toggleBtn.style.bottom = margin;
-				toggleBtn.style.right = margin;
+				toggleBtn.style.bottom = bottomInset;
+				toggleBtn.style.right = rightInset;
 				break;
 		}
 		console.log(SCRIPT_ID, "Applied toggle button corner:", settings.toggleBtnCorner);
@@ -641,6 +754,7 @@
     --md-sys-color-warning: #ff9500;
     --panel-opacity: ${DEFAULT_SETTINGS.panelOpacity};
     --toggle-size: ${TOGGLE_BASE_SIZE * DEFAULT_SETTINGS.toggleSizeScale}px;
+    --toggle-hitbox-size: ${TOGGLE_HITBOX_SIZE}px;
     --toggle-opacity: ${DEFAULT_SETTINGS.toggleOpacity};
     --md-ref-typeface-plain: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
     --md-sys-typescale-body-large-font-family: var(--md-ref-typeface-plain);
@@ -681,8 +795,9 @@
     cursor: grab;
 }
 
-#mobile-block-panel { bottom: max(16px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(100px) scale(0.95); z-index: 2147483645 !important; }
+#mobile-block-panel { bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); left: 50%; transform: translateX(-50%) translateY(100px) scale(0.95); z-index: 2147483645 !important; }
 #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.94); z-index: 2147483647 !important; max-width: 326px; max-height: 78vh; overflow-y: auto; }
+#mobile-settings-panel { flex-direction: column; overflow: hidden; max-height: min(74vh, 620px); }
 
 #mobile-block-panel.visible {
     opacity: 1;
@@ -731,21 +846,25 @@
 }
 
 #mobile-block-toggleBtn {
-    z-index: 2147483646 !important; background-color: rgba(255, 255, 255, 0.70) !important; color: rgba(60, 60, 67, 0.54) !important;
-    opacity: var(--toggle-opacity) !important; width: var(--toggle-size) !important; height: var(--toggle-size) !important; border-radius: 999px !important; border: 0.5px solid rgba(60, 60, 67, 0.16) !important; cursor: pointer !important;
-    box-shadow: 0 8px 18px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.08) !important;
+    z-index: 2147483646 !important; background-color: transparent !important; color: rgba(60, 60, 67, 0.54) !important;
+    opacity: var(--toggle-opacity) !important; width: var(--toggle-hitbox-size) !important; height: var(--toggle-hitbox-size) !important; border-radius: 999px !important; border: none !important; cursor: pointer !important;
+    box-shadow: none !important;
     transition: background-color 0.2s ease, transform 0.16s ease, box-shadow 0.2s ease, opacity 0.2s ease, border 0.2s ease, top 0.2s ease, left 0.2s ease, bottom 0.2s ease, right 0.2s ease;
     display: flex !important; align-items: center !important; justify-content: center !important; overflow: hidden !important; backface-visibility: hidden; -webkit-backface-visibility: hidden; position: fixed !important; -webkit-tap-highlight-color: transparent !important;
 }
-#mobile-block-toggleBtn:active { transform: scale(0.94); box-shadow: 0 5px 12px rgba(0,0,0,0.12) !important; }
+#mobile-block-toggleBtn::before { content: ''; position: absolute; width: var(--toggle-size); height: var(--toggle-size); border-radius: 999px; background-color: rgba(255, 255, 255, 0.70); border: 0.5px solid rgba(60, 60, 67, 0.16); box-shadow: 0 8px 18px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.08); transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, width 0.2s ease, height 0.2s ease; }
+#mobile-block-toggleBtn:active { transform: scale(0.94); box-shadow: none !important; }
 #mobile-block-toggleBtn.selecting {
-    background-color: rgba(255, 255, 255, 0.78) !important;
+    background-color: transparent !important;
     color: rgba(60, 60, 67, 0.62) !important;
-    border-color: rgba(60, 60, 67, 0.22) !important;
-    box-shadow: 0 7px 16px rgba(0,0,0,0.12), 0 0 0 2px rgba(60, 60, 67, 0.08) !important;
+}
+#mobile-block-toggleBtn.selecting::before {
+    background-color: rgba(255, 255, 255, 0.78);
+    border-color: rgba(60, 60, 67, 0.22);
+    box-shadow: 0 7px 16px rgba(0,0,0,0.12), 0 0 0 2px rgba(60, 60, 67, 0.08);
 }
 #mobile-block-toggleBtn.hidden-toggle { display: none !important; }
-#mobile-block-toggleBtn .toggle-icon { width: 46%; height: 46%; display: block; margin: auto; background-color: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
+#mobile-block-toggleBtn .toggle-icon { position: relative; z-index: 1; width: calc(var(--toggle-size) * 0.46); height: calc(var(--toggle-size) * 0.46); display: block; margin: auto; background-color: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
 #mobile-block-toggleBtn .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 5h6v6H5V5Zm8 0h6v6h-6V5ZM5 13h6v6H5v-6Zm8 0h6v6h-6v-6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 5h6v6H5V5Zm8 0h6v6h-6V5ZM5 13h6v6H5v-6Zm8 0h6v6h-6v-6Z"/></svg>'); }
 #mobile-block-toggleBtn.selecting .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 3h2v5h-2V3Zm0 13h2v5h-2v-5ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-4-2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 3h2v5h-2V3Zm0 13h2v5h-2v-5ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-4-2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>'); }
 #mobile-block-toggleBtn .toggle-icon-adguard { background-image: url('${ALT_TOGGLE_LOGO_URL}'); background-size: contain; background-repeat: no-repeat; background-position: center; background-color: transparent !important; mask-image: none; -webkit-mask-image: none; width: 60%; height: 60%; }
@@ -753,6 +872,7 @@
 .mb-btn { padding: 7px 12px; border: 0.5px solid transparent; border-radius: 10px !important; font-size: var(--md-sys-typescale-label-large-font-size); font-weight: 600; cursor: pointer; transition: background-color 0.16s ease, transform 0.1s ease, box-shadow 0.16s ease, border-color 0.16s ease; text-align: center; box-shadow: none; min-width: 52px; min-height: 34px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; opacity: 1 !important; -webkit-tap-highlight-color: transparent !important; line-height: 1.35; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0; }
 .mb-btn:hover { box-shadow: 0 1px 5px rgba(0,0,0,0.08); }
 .mb-btn:active { transform: scale(0.97); box-shadow: none; }
+.mb-btn:disabled { opacity: 0.36 !important; cursor: default; pointer-events: none; box-shadow: none !important; }
 .mb-btn.primary { background-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
 .mb-btn.primary:hover { background-color: #b0d3ff; } .mb-btn.primary:active { background-color: #c0daff; }
 .mb-btn.secondary { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
@@ -778,7 +898,8 @@
 #blocker-info:empty::after { content: '없음'; color: var(--md-sys-color-on-surface-variant); font-style: italic; }
 #blocker-nav-label { min-height: 1.25em; margin-top: -4px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: center; }
 .element-nav-row { display: grid; grid-template-columns: 52px 1fr 52px; gap: 6px; align-items: center; margin-top: 6px; }
-.element-nav-row .mb-slider { margin: 0; }
+.element-nav-row .mb-slider { margin: 0; background: linear-gradient(to right, rgba(0,122,255,0.32) 0%, rgba(0,122,255,0.32) var(--nav-progress, 50%), rgba(120,120,128,0.20) var(--nav-progress, 50%), rgba(120,120,128,0.20) 100%); }
+.element-nav-row .mb-slider:disabled { opacity: 0.45; }
 .nav-step-btn { min-width: 0; min-height: 30px; padding: 5px 7px; font-size: var(--md-sys-typescale-label-small-font-size); }
 #blocker-selector-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); }
 .selector-chip { display: inline-flex; align-items: center; min-height: 20px; padding: 1px 7px; border-radius: 999px; background-color: rgba(118,118,128,0.10); border: 0.5px solid rgba(60,60,67,0.08); }
@@ -788,6 +909,7 @@
 label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; margin-top: 8px; font-weight: 600; }
 
 .settings-layout { display: block; }
+.settings-scroll { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
 .settings-item { margin: 0; padding: 8px 0; display: flex; flex-direction: column; gap: 6px; border-bottom: 0.5px solid rgba(60,60,67,0.10); }
 .settings-section-title { margin: 16px 0 4px; padding-top: 2px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); font-weight: 700; letter-spacing: 0; }
 .settings-section-title:first-child { margin-top: 0; }
@@ -954,7 +1076,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		settingsPanel.className = 'mobile-block-ui';
 		settingsPanel.innerHTML = `
             <h3 class="mb-panel-title">${STRINGS.settingsTitle}</h3>
-            <div class="scrollable-container settings-layout" style="max-height: min(56vh, 480px); overflow-y: auto;">
+            <div class="scrollable-container settings-layout settings-scroll">
             <div class="settings-section-title">기본</div>
             <div class="settings-item">
                 <label><span class="settings-label-text">${STRINGS.includeSiteNameLabel}</span>
@@ -1000,9 +1122,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             </div>
             <div class="settings-item">
                  <label><span class="settings-label-text">${STRINGS.launcherModeLabel}</span></label>
-                 <div class="launcher-mode-grid">
-                     <button data-launcher-mode="button" class="mb-btn launcher-mode-btn">${STRINGS.launcherButton}</button>
-                     <button data-launcher-mode="gesture" class="mb-btn launcher-mode-btn">${STRINGS.launcherGesture}</button>
+                 <div class="launcher-mode-grid" role="radiogroup" aria-label="${STRINGS.launcherModeLabel}">
+                     <button data-launcher-mode="button" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherButton}</button>
+                     <button data-launcher-mode="gesture" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherGesture}</button>
                  </div>
             </div>
             <div class="settings-section-title">UI</div>
@@ -1026,7 +1148,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                     <span class="settings-label-text">${STRINGS.toggleSizeLabel}</span>
                     <span id="toggle-size-value" class="settings-value">${settings.toggleSizeScale.toFixed(1)}x</span>
                 </label>
-                <input id="settings-toggle-size" type="range" class="mb-slider" min="0.5" max="2.0" step="0.1" value="${settings.toggleSizeScale}" aria-label="Toggle Button Size">
+                <input id="settings-toggle-size" type="range" class="mb-slider" min="${TOGGLE_MIN_VISUAL_SCALE}" max="2.0" step="0.05" value="${settings.toggleSizeScale}" aria-label="Toggle Button Size">
             </div>
             <div class="settings-item">
                 <label for="settings-toggle-opacity">
@@ -1194,6 +1316,15 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		originalStyleMap.delete(el);
 	}
 
+	function pruneHiddenElementRefs() {
+		Array.from(hiddenElements).forEach(el => {
+			if (!el?.isConnected) hiddenElements.delete(el);
+		});
+		Array.from(originalStyleMap.keys()).forEach(el => {
+			if (!el?.isConnected) originalStyleMap.delete(el);
+		});
+	}
+
 	async function applyBlocking(showToastNotification = false) {
 		if (settings.tempBlockingDisabled) {
 			console.log(SCRIPT_ID, "Blocking temporarily disabled. Skipping application.");
@@ -1205,6 +1336,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		try {
 			console.log(SCRIPT_ID, "Applying block rules...");
+			pruneHiddenElementRefs();
 			if (blockedSelectorsCache.length === 0) {
 				await loadBlockedSelectors();
 			}
@@ -1212,6 +1344,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			let count = 0;
 			let appliedCount = 0;
 			const currentHostname = location.hostname;
+			const queryRoots = getQueryRoots(document);
 
 			blockedSelectorsCache.forEach(rule => {
 				const parts = getRuleParts(rule);
@@ -1231,7 +1364,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				}
 
 				try {
-					const elements = querySelectorAllEverywhere(cssSelector);
+					const elements = querySelectorAllEverywhere(cssSelector, document, queryRoots);
 					elements.forEach(el => {
 						const isHiddenByScript = hiddenElements.has(el) || el.hasAttribute('data-mes-hidden');
 						const isNaturallyHidden = window.getComputedStyle(el).display === 'none';
@@ -1262,6 +1395,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 	function disableAllBlocking(showToastNotification = true) {
 		console.log(SCRIPT_ID, "Disabling all blocking rules temporarily...");
+		pruneHiddenElementRefs();
 		let restoredCount = 0;
 		const elementsToRestore = new Set([
 			...hiddenElements,
@@ -1419,8 +1553,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		return finalSelector;
 	}
 
+	function generateElementSelector(el, maxDepth = 7, requireUnique = true) {
+		const localSelector = generateSelector(el, maxDepth, requireUnique);
+		if (!localSelector) return '';
+		return createShadowScopedSelector(el, localSelector);
+	}
+
 	function generateSimilarSelector(el) {
-		const selector = generateSelector(el, 7, false);
+		const selector = generateElementSelector(el, 7, false);
 		if (!selector) return '';
 		const simplified = selector
 			.replace(/:nth-of-type\(\d+\)/g, '')
@@ -1547,7 +1687,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		function updateInfo() {
 			if (!info) return;
-			const selectorText = selectedEl ? generateSelector(selectedEl, 7, false) : '';
+			const selectorText = selectedEl ? generateElementSelector(selectedEl, 7, false) : '';
 			info.textContent = selectorText;
 			if (selectorMeta) {
 				selectorMeta.innerHTML = '';
@@ -1589,10 +1729,18 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			return [...parents, ...children];
 		}
 
-		function getElementLabel(el, originEl) {
+		function getElementLabel(el, originEl, items = null) {
 			if (!el) return '';
 			const tag = el.tagName.toLowerCase();
 			const suffix = el.id ? `#${el.id}` : getStableClasses(el).length ? `.${getStableClasses(el).join('.')}` : '';
+			const navItems = items || buildNavigationItems(originEl);
+			const originIndex = navItems.indexOf(originEl);
+			const currentIndex = navItems.indexOf(el);
+			if (currentIndex >= 0 && originIndex >= 0) {
+				if (currentIndex === originIndex) return `${STRINGS.navRoot}: ${tag}${suffix}`;
+				if (currentIndex < originIndex) return `${STRINGS.navParent} ${originIndex - currentIndex}단계: ${tag}${suffix}`;
+				return `${STRINGS.navChild} ${currentIndex - originIndex}: ${tag}${suffix}`;
+			}
 			if (el === originEl) return `${STRINGS.navRoot}: ${tag}${suffix}`;
 			if (getParentElement(el) === originEl) return `${STRINGS.navChild}: ${tag}${suffix}`;
 			return `${STRINGS.navParent}: ${tag}${suffix}`;
@@ -1601,6 +1749,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		function refreshNavigationSlider() {
 			if (!slider || !initialTouchedElement) {
 				if (navLabel) navLabel.textContent = '';
+				if (parentBtn) parentBtn.disabled = true;
+				if (childBtn) childBtn.disabled = true;
+				if (slider) slider.disabled = true;
 				return;
 			}
 			const items = buildNavigationItems(initialTouchedElement);
@@ -1608,8 +1759,30 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			slider.min = 0;
 			slider.max = Math.max(items.length - 1, 0);
 			slider.value = currentIndex;
+			slider.disabled = items.length <= 1;
+			const progress = items.length > 1 ? (currentIndex / (items.length - 1)) * 100 : 50;
+			slider.style.setProperty('--nav-progress', `${progress}%`);
+			const labelText = items.length ? getElementLabel(items[currentIndex], initialTouchedElement, items) : '';
+			slider.setAttribute('aria-valuetext', labelText);
+			if (parentBtn) parentBtn.disabled = currentIndex <= 0;
+			if (childBtn) childBtn.disabled = currentIndex >= items.length - 1;
 			if (navLabel) {
-				navLabel.textContent = items.length ? `${currentIndex + 1}/${items.length} · ${getElementLabel(items[currentIndex], initialTouchedElement)}` : '';
+				navLabel.textContent = items.length ? `${labelText} · ${currentIndex + 1}/${items.length}` : '';
+			}
+		}
+
+		function moveNavigation(delta) {
+			if (!initialTouchedElement) {
+				if (!selectedEl) return;
+				initialTouchedElement = selectedEl;
+			}
+			const items = buildNavigationItems(initialTouchedElement);
+			if (!items.length) return;
+			const currentIndex = Math.max(0, items.indexOf(selectedEl));
+			const nextIndex = Math.min(items.length - 1, Math.max(0, currentIndex + delta));
+			const next = items[nextIndex];
+			if (next && next !== selectedEl) {
+				selectElement(next, true);
 			}
 		}
 
@@ -1648,7 +1821,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				});
 
 				activePanel = panelElement;
-				panelElement.style.display = 'block';
+				panelElement.style.display = panelElement === settingsPanel ? 'flex' : 'block';
 				requestAnimationFrame(() => {
 					requestAnimationFrame(() => {
 						panelElement.classList.add('visible');
@@ -1838,7 +2011,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		function formatElementSummary(el) {
 			if (!el) return '';
-			const selector = generateSelector(el, 7, false);
+			const selector = generateElementSelector(el, 7, false);
 			const quality = selector ? getSelectorQuality(selector, el) : null;
 			const similar = generateSimilarSelector(el);
 			const url = findNearestUrl(el);
@@ -1957,8 +2130,20 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (!settings.privacyMode) return rawUrl;
 			try {
 				const url = new URL(rawUrl, location.href);
-				if (url.search) url.search = '?redacted';
-				if (url.hash) url.hash = '';
+				const sanitizedSegments = url.pathname.split('/').map(segment => {
+					if (!segment) return segment;
+					const decoded = safeDecode(segment);
+					const looksSensitive = /@|%40/.test(segment) ||
+						/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(decoded) ||
+						/^[a-f0-9]{12,}$/i.test(decoded) ||
+						/^[A-Za-z0-9_-]{18,}$/.test(decoded) ||
+						/^\d{6,}$/.test(decoded);
+					return looksSensitive ? ':redacted' : segment.slice(0, 48);
+				});
+				url.pathname = sanitizedSegments.join('/');
+				const hadSearch = !!url.search;
+				url.search = hadSearch ? '?redacted' : '';
+				url.hash = '';
 				return url.href;
 			} catch (e) {
 				return String(rawUrl || '').replace(/\?.*$/, '?redacted').replace(/#.*$/, '');
@@ -1967,10 +2152,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		function getCookieRows() {
 			return document.cookie.split(';').map(cookie => cookie.trim()).filter(Boolean).map(cookie => {
-				const parts = cookie.split('=');
-				const value = safeDecode(parts.join('=') || '');
+				const [name = '', ...valueParts] = cookie.split('=');
+				const value = safeDecode(valueParts.join('='));
 				return {
-					name: parts.shift(),
+					name,
 					value,
 					displayValue: maskSensitiveValue(value)
 				};
@@ -2030,7 +2215,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 
 			if (tab === 'element') {
-				const selector = selectedEl ? generateSelector(selectedEl, 7, true) : '';
+				const selector = selectedEl ? generateElementSelector(selectedEl, 7, true) : '';
 				const similar = selectedEl ? generateSimilarSelector(selectedEl) : '';
 				const children = selectedEl ? getChildElements(selectedEl) : [];
 				inspectorTextSnapshot = formatElementSummary(selectedEl);
@@ -2119,22 +2304,50 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		let domObserver = null;
 		let domObserverTimer = null;
+		let observedMutationRoots = new WeakSet();
 
 		function setupDomObserver() {
 			if (domObserver) {
 				domObserver.disconnect();
 				domObserver = null;
 			}
+			observedMutationRoots = new WeakSet();
 			if (!settings.observeDomChanges || settings.tempBlockingDisabled) return;
+
+			const observeRoot = (root) => {
+				if (!root || observedMutationRoots.has(root)) return;
+				try {
+					domObserver.observe(root, {
+						childList: true,
+						subtree: true
+					});
+					observedMutationRoots.add(root);
+				} catch (e) {}
+			};
+
+			const observeOpenShadowRoots = (root = document) => {
+				if (!settings.shadowDomSupport) return;
+				collectOpenShadowRoots(root).forEach(observeRoot);
+			};
 
 			domObserver = new MutationObserver((mutations) => {
 				if (applyingBlocking) return;
+				let shouldRefreshRoots = false;
 				const hasPageChange = mutations.some(mutation => {
 					const target = mutation.target;
-					if (!target || target.nodeType !== 1 || target.closest?.('.mobile-block-ui')) return false;
+					const targetIsUi = target?.nodeType === 1 && target.closest?.('.mobile-block-ui');
+					if (!target || targetIsUi) return false;
 					return Array.from(mutation.addedNodes || []).some(node => node.nodeType === 1 && !node.closest?.('.mobile-block-ui'));
 				});
 				if (!hasPageChange) return;
+				mutations.forEach(mutation => {
+					Array.from(mutation.addedNodes || []).forEach(node => {
+						if (node.nodeType === 1 && !node.closest?.('.mobile-block-ui') && (node.shadowRoot || node.querySelector?.('*'))) {
+							shouldRefreshRoots = true;
+						}
+					});
+				});
+				if (shouldRefreshRoots) observeOpenShadowRoots(document);
 
 				clearTimeout(domObserverTimer);
 				domObserverTimer = setTimeout(() => {
@@ -2148,10 +2361,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				}, 120);
 			});
 
-			domObserver.observe(document.documentElement, {
-				childList: true,
-				subtree: true
-			});
+			observeRoot(document.documentElement);
+			observeOpenShadowRoots(document);
 		}
 
 
@@ -2161,21 +2372,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			setBlockMode(!selecting);
 		});
 
-		parentBtn.addEventListener('click', () => {
-			const parent = getParentElement(selectedEl);
-			if (parent && !['body', 'html'].includes(parent.tagName.toLowerCase())) {
-				selectElement(parent, true);
-			}
-		});
+		parentBtn.addEventListener('click', () => moveNavigation(-1));
 
-		childBtn.addEventListener('click', () => {
-			const children = getChildElements(selectedEl);
-			if (!children.length) {
-				showToast(STRINGS.noChildElements, 'info');
-				return;
-			}
-			selectElement(children[0], true);
-		});
+		childBtn.addEventListener('click', () => moveNavigation(1));
 
 		moreBtn.addEventListener('click', () => {
 			secondaryActions.classList.toggle('visible');
@@ -2187,7 +2386,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				showToast(STRINGS.noElementSelected, 'warning');
 				return;
 			}
-			const selector = generateSelector(selectedEl, 7, true);
+			const selector = generateElementSelector(selectedEl, 7, true);
 			if (!selector) {
 				showToast(STRINGS.cannotGenerateSelector, 'error');
 				return;
@@ -2206,7 +2405,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				showToast(STRINGS.noElementSelected, 'warning');
 				return;
 			}
-			const selector = generateSelector(selectedEl, 7, true);
+			const selector = generateElementSelector(selectedEl, 7, true);
 			if (!selector) {
 				showToast(STRINGS.cannotGenerateSelector, 'error');
 				return;
@@ -2283,7 +2482,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 
 			try {
-				const selector = generateSelector(selectedEl, 7, true);
+				const selector = generateElementSelector(selectedEl, 7, true);
 				console.log('[addBtn] Generated selector for saving:', selector);
 				if (!selector) {
 					showToast(STRINGS.cannotGenerateSelector, 'error');
@@ -2479,7 +2678,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		function updateLauncherModeButtons() {
 			const mode = settings.hideToggleButton ? 'gesture' : 'button';
 			launcherModeButtons.forEach(button => {
-				button.classList.toggle('active', button.dataset.launcherMode === mode);
+				const active = button.dataset.launcherMode === mode;
+				button.classList.toggle('active', active);
+				button.setAttribute('aria-checked', active ? 'true' : 'false');
+				button.setAttribute('aria-pressed', active ? 'true' : 'false');
 			});
 			if (toggleBtn) {
 				toggleBtn.classList.toggle('hidden-toggle', settings.hideToggleButton);
@@ -2624,8 +2826,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			toggleSizeValue.textContent = newValue.toFixed(1) + 'x';
 			document.documentElement.style.setProperty('--toggle-size', `${TOGGLE_BASE_SIZE * newValue}px`);
 			if (toggleBtn) {
-				toggleBtn.style.setProperty('width', `var(--toggle-size)`, 'important');
-				toggleBtn.style.setProperty('height', `var(--toggle-size)`, 'important');
+				toggleBtn.style.setProperty('width', `var(--toggle-hitbox-size)`, 'important');
+				toggleBtn.style.setProperty('height', `var(--toggle-hitbox-size)`, 'important');
 			}
 			debounceSaveSettings();
 		});
@@ -2705,6 +2907,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						};
 						await saveSettings();
 						await loadSettings();
+						await saveSettings();
 						updateCSSVariables();
 						updateToggleIcon();
 						applyToggleBtnPosition();
@@ -2886,13 +3089,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			resetPreview();
 			const items = buildNavigationItems(initialTouchedElement);
 			const next = items[parseInt(e.target.value, 10)];
-			if (next && selectedEl !== next) {
-				if (selectedEl) clearSelectionHighlight(selectedEl);
-				selectedEl = next;
-				applySelectionHighlight(selectedEl);
-				updateInfo();
-				refreshNavigationSlider();
-			}
+			if (next && selectedEl !== next) selectElement(next, true);
 		});
 
 		function makePanelDraggable(el) {
@@ -2986,6 +3183,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 	async function run() {
 		await loadSettings();
+		registerRecoveryCommand();
 		if (document.readyState === 'loading') {
 			document.addEventListener('DOMContentLoaded', createUIElements);
 		} else {
