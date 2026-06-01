@@ -1,0 +1,30 @@
+name: Validate
+
+on:
+  push:
+    branches:
+      - main
+      - dev/feature-upgrades
+  pull_request:
+
+jobs:
+  userscript:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run validation
+        run: npm test
