@@ -300,6 +300,7 @@
 	const STYLE_BLOCK_ID = 'mes-rule-style';
 	const STYLE_BLOCK_OWNER_ATTR = 'data-mes-style-owner';
 	const STYLE_BLOCK_OWNER_VALUE = 'blocking';
+	const UI_STYLE_ID = 'mes-ui-style';
 
 	function escapeAttributeValue(value) {
 		return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim();
@@ -796,6 +797,8 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 	}
 
 	const style = document.createElement('style');
+	style.id = UI_STYLE_ID;
+	style.setAttribute(STYLE_BLOCK_OWNER_ATTR, 'ui');
 
 	function updateCSSVariables() {
 		document.documentElement.style.setProperty('--panel-opacity', settings.panelOpacity);
@@ -1150,9 +1153,72 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
     .inspector-tabs { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 }
     `;
+	const uiStyleText = style.textContent;
 	document.head.appendChild(style);
 
 	let panel, settingsPanel, toggleBtn, listPanel, inspectorPanel, toastContainer;
+	let uiGuardObserver = null;
+	let uiGuardScheduled = false;
+	let uiGuardInterval = null;
+
+	function getUiNodes() {
+		return [toastContainer, panel, listPanel, inspectorPanel, settingsPanel, toggleBtn].filter(Boolean);
+	}
+
+	function nodeTouchesMesUi(node) {
+		if (!node) return false;
+		if (node === style) return true;
+		return getUiNodes().some(uiNode => node === uiNode || node.contains?.(uiNode));
+	}
+
+	function ensureUiAttached() {
+		const headTarget = document.head || document.documentElement;
+		const bodyTarget = document.body || document.documentElement;
+		if (style && headTarget) {
+			if (!style.isConnected || style.parentNode !== headTarget) {
+				headTarget.appendChild(style);
+			}
+			if (style.textContent !== uiStyleText) {
+				style.textContent = uiStyleText;
+			}
+		}
+		if (bodyTarget) {
+			getUiNodes().forEach(node => {
+				if (!node.isConnected || node.parentNode !== bodyTarget) {
+					bodyTarget.appendChild(node);
+				}
+			});
+		}
+		updateCSSVariables();
+		updateToggleIcon();
+		applyToggleBtnPosition();
+	}
+
+	function scheduleUiGuardCheck() {
+		if (uiGuardScheduled) return;
+		uiGuardScheduled = true;
+		setTimeout(() => {
+			uiGuardScheduled = false;
+			ensureUiAttached();
+		}, 80);
+	}
+
+	function setupUiSelfHealing() {
+		if (uiGuardObserver) uiGuardObserver.disconnect();
+		uiGuardObserver = new MutationObserver(mutations => {
+			if (mutations.some(mutation => Array.from(mutation.removedNodes || []).some(nodeTouchesMesUi))) {
+				scheduleUiGuardCheck();
+			}
+		});
+		try {
+			uiGuardObserver.observe(document.documentElement, {
+				childList: true,
+				subtree: true
+			});
+		} catch (e) {}
+		if (uiGuardInterval) clearInterval(uiGuardInterval);
+		uiGuardInterval = setInterval(ensureUiAttached, 4000);
+	}
 
 	function createUIElements() {
 		toastContainer = document.createElement('div');
@@ -1355,6 +1421,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		updateCSSVariables();
 		updateToggleIcon();
 		applyToggleBtnPosition();
+		setupUiSelfHealing();
 
 		initRefsAndEvents();
 		applyBlocking();
@@ -1586,6 +1653,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	function isMesInternalNode(node) {
 		if (!node || node.nodeType !== 1) return false;
 		return isMesOwnedStyleNode(node) ||
+			node.id === UI_STYLE_ID ||
 			node.id === 'mes-isolation-style' ||
 			node.id === 'mes-shadow-highlight-style' ||
 			isMesUiElement(node);

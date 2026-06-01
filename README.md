@@ -16,6 +16,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Shadow DOM selection with host-scoped rules for open shadow roots
 - Dynamic page monitoring that reapplies rules to later DOM and Shadow DOM changes
 - CSS rule hiding mode with inline fallback for sensitive or unsupported selectors
+- Self-healing controls that restore the selector UI if a page removes its nodes or styles
 - Preview/restore flow plus display, visibility, and opacity hiding strategies
 - Element inspector for HTML, computed CSS, script hints, page source, cookies, resources, and diagnostics
 - Temporary focus mode that isolates the selected element and its visible scope for inspection
