@@ -12,7 +12,7 @@
 // @grant        GM.setClipboard
 // @grant        GM.setValue
 // @grant        GM.getValue
-// @namespace https://github.com/sampple-korea/MES
+// @namespace https://adguard.com
 // @downloadURL https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
 // @updateURL https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
 // ==/UserScript==
@@ -249,6 +249,35 @@
 		return null;
 	}
 
+	function hasGmValueStorage() {
+		return !!((getLegacyGmApi('getValue') || getGmObjectApi('getValue')) &&
+			(getLegacyGmApi('setValue') || getGmObjectApi('setValue')));
+	}
+
+	function getLocalStorageValue(key) {
+		try {
+			return localStorage.getItem(key);
+		} catch (e) {
+			return null;
+		}
+	}
+
+	function removeLocalStorageValue(key) {
+		try {
+			localStorage.removeItem(key);
+		} catch (e) {}
+	}
+
+	function parseStoredArray(value) {
+		if (!value) return [];
+		try {
+			const parsed = JSON.parse(value);
+			return Array.isArray(parsed) ? parsed : [];
+		} catch (e) {
+			return [];
+		}
+	}
+
 	async function gmGetValue(key, defaultValue) {
 		const legacyGetValue = getLegacyGmApi('getValue');
 		if (legacyGetValue) return legacyGetValue(key, defaultValue);
@@ -293,7 +322,16 @@
 	async function loadSettings() {
 		let storedSettings = {};
 		try {
-			const storedValue = await gmGetValue(SETTINGS_KEY, JSON.stringify(DEFAULT_SETTINGS));
+			let storedValue = await gmGetValue(SETTINGS_KEY, null);
+			if (!storedValue && hasGmValueStorage()) {
+				const localStoredValue = getLocalStorageValue(SETTINGS_KEY);
+				if (localStoredValue) {
+					storedValue = localStoredValue;
+					await gmSetValue(SETTINGS_KEY, localStoredValue);
+					removeLocalStorageValue(SETTINGS_KEY);
+				}
+			}
+			if (!storedValue) storedValue = JSON.stringify(DEFAULT_SETTINGS);
 			storedSettings = JSON.parse(storedValue || '{}');
 		} catch (e) {
 			console.error(SCRIPT_ID, `Error loading settings from storage key '${SETTINGS_KEY}', using defaults.`, e);
@@ -1786,11 +1824,26 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	let disabledSelectorsLoaded = false;
 
 	async function loadBlockedSelectors() {
-		let stored = '[]';
+		let stored = null;
 		try {
-			stored = await gmGetValue(BLOCKED_SELECTORS_KEY, '[]');
-			const parsed = JSON.parse(stored);
-			blockedSelectorsCache = Array.isArray(parsed) ? parsed : [];
+			stored = await gmGetValue(BLOCKED_SELECTORS_KEY, null);
+			let selectors = parseStoredArray(stored).filter(rule => typeof rule === 'string');
+
+			if (hasGmValueStorage()) {
+				const localStored = getLocalStorageValue(BLOCKED_SELECTORS_KEY);
+				const localSelectors = parseStoredArray(localStored).filter(rule => typeof rule === 'string');
+				if (localSelectors.length) {
+					const mergedSelectors = Array.from(new Set([...selectors, ...localSelectors]));
+					await gmSetValue(BLOCKED_SELECTORS_KEY, JSON.stringify(mergedSelectors));
+					removeLocalStorageValue(BLOCKED_SELECTORS_KEY);
+					if (mergedSelectors.length > selectors.length) {
+						console.log(SCRIPT_ID, `Migrated ${mergedSelectors.length - selectors.length} fallback rules to GM storage.`);
+					}
+					selectors = mergedSelectors;
+				}
+			}
+
+			blockedSelectorsCache = selectors;
 			console.log(SCRIPT_ID, `Loaded ${blockedSelectorsCache.length} rules from storage.`);
 			return blockedSelectorsCache;
 		} catch (e) {
@@ -1822,11 +1875,25 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	}
 
 	async function loadDisabledSelectors() {
-		let stored = '[]';
+		let stored = null;
 		try {
-			stored = await gmGetValue(DISABLED_SELECTORS_KEY, '[]');
-			const parsed = JSON.parse(stored);
-			disabledSelectorsCache = Array.isArray(parsed) ? parsed.filter(rule => typeof rule === 'string') : [];
+			stored = await gmGetValue(DISABLED_SELECTORS_KEY, null);
+			let disabledSelectors = parseStoredArray(stored).filter(rule => typeof rule === 'string');
+
+			if (hasGmValueStorage()) {
+				const localStored = getLocalStorageValue(DISABLED_SELECTORS_KEY);
+				const localDisabledSelectors = parseStoredArray(localStored).filter(rule => typeof rule === 'string');
+				if (localDisabledSelectors.length) {
+					const knownSelectors = new Set(blockedSelectorsCache);
+					const mergedSelectors = Array.from(new Set([...disabledSelectors, ...localDisabledSelectors]))
+						.filter(rule => !knownSelectors.size || knownSelectors.has(rule));
+					await gmSetValue(DISABLED_SELECTORS_KEY, JSON.stringify(mergedSelectors));
+					removeLocalStorageValue(DISABLED_SELECTORS_KEY);
+					disabledSelectors = mergedSelectors;
+				}
+			}
+
+			disabledSelectorsCache = disabledSelectors;
 			disabledSelectorsLoaded = true;
 			return disabledSelectorsCache;
 		} catch (e) {

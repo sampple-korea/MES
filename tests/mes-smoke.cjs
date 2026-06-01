@@ -791,6 +791,67 @@ async function runLexicalGmStorageFlow(browser) {
   await context.close();
 }
 
+async function runLocalFallbackMigrationFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        .fallback-ad { min-height: 96px; padding: 20px; border-radius: 12px; background: #fff2d8; }
+      </style>
+    </head>
+    <body>
+      <main>
+        <section class="fallback-ad">Fallback storage target</section>
+        <section>Content</section>
+      </main>
+    </body>
+  </html>`;
+  const { context, page } = await openMesPage(
+    browser,
+    html,
+    { compactPickerMode: true, hideStrategy: 'stylesheet' },
+    {
+      mobileBlockedSelectors_v2: ['mes.test##.fallback-ad', 'other.example##.fallback-foreign'],
+      mobileDisabledSelectors_v1: ['mes.test##.fallback-ad']
+    },
+    {
+      lexicalGmStorage: {
+        mobileBlockedSelectors_v2: '[]',
+        mobileDisabledSelectors_v1: '[]'
+      }
+    }
+  );
+
+  await page.locator('#mobile-block-toggleBtn').click();
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  await page.locator('#blocker-more').click();
+  await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+  await page.locator('#blocker-list').click();
+  await page.waitForSelector('#mobile-blocklist-panel.visible', { timeout: 5000 });
+
+  const currentRow = await page.locator('.blocklist-item').filter({ hasText: '.fallback-ad' }).innerText();
+  if (!currentRow.includes('현재 사이트') || !currentRow.includes('꺼짐')) {
+    throw new Error(`fallback current rule was not migrated with disabled state: ${currentRow}`);
+  }
+  const foreignRow = await page.locator('.blocklist-item').filter({ hasText: '.fallback-foreign' }).innerText();
+  if (!foreignRow.includes('다른 사이트')) {
+    throw new Error(`fallback other-site rule was not migrated: ${foreignRow}`);
+  }
+  const remainingLocalValues = await page.evaluate(() => [
+    localStorage.getItem('mobileElementSelectorSettings_v1_2'),
+    localStorage.getItem('mobileBlockedSelectors_v2'),
+    localStorage.getItem('mobileDisabledSelectors_v1')
+  ]);
+  if (remainingLocalValues.some(value => value !== null)) {
+    throw new Error(`fallback storage keys were not cleared: ${JSON.stringify(remainingLocalValues)}`);
+  }
+
+  await context.close();
+}
+
 async function run() {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -801,6 +862,7 @@ async function run() {
     await runLegacyImportFlow(browser);
     await runSelectorCandidateFlow(browser);
     await runLexicalGmStorageFlow(browser);
+    await runLocalFallbackMigrationFlow(browser);
   } finally {
     await browser.close();
   }
