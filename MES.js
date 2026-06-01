@@ -44,6 +44,7 @@
 		copy: '복사',
 		copyCss: 'CSS',
 		copyRule: '규칙',
+		similarRule: '유사',
 		preview: '미리보기',
 		restorePreview: '되돌리기',
 		saveRule: '규칙 저장',
@@ -104,6 +105,7 @@
 		urlNotFound: 'URL을 찾을 수 없습니다.',
 		clipboardError: '클립보드 복사 실패',
 		similarSelectorCopied: '유사 선택자 복사됨',
+		similarRuleReady: (count) => `유사 규칙 ${count}개 대상`,
 		noChildElements: '하위 요소가 없습니다.',
 		inspectorUnavailable: '선택된 요소 정보가 없습니다.',
 		noCookies: '표시할 쿠키가 없습니다.',
@@ -1288,6 +1290,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             <div id="blocker-secondary-actions" class="secondary-action-grid">
                 <button id="blocker-copy-css" class="mb-btn secondary">${STRINGS.copyCss}</button>
                 <button id="blocker-copy-rule" class="mb-btn secondary">${STRINGS.copyRule}</button>
+                <button id="blocker-similar-rule" class="mb-btn secondary">${STRINGS.similarRule}</button>
                 <button id="blocker-url" class="mb-btn secondary">${STRINGS.extractUrl}</button>
                 <button id="blocker-inspect" class="mb-btn tertiary">${STRINGS.inspect}</button>
                 <button id="blocker-list" class="mb-btn tertiary">${STRINGS.list}</button>
@@ -2140,6 +2143,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		const secondaryActions = panel.querySelector('#blocker-secondary-actions');
 		const copyCssBtn = panel.querySelector('#blocker-copy-css');
 		const copyRuleBtn = panel.querySelector('#blocker-copy-rule');
+		const similarRuleBtn = panel.querySelector('#blocker-similar-rule');
 		const urlBtn = panel.querySelector('#blocker-url');
 		const previewBtn = panel.querySelector('#blocker-preview');
 		const addBtn = panel.querySelector('#blocker-add-block');
@@ -3113,6 +3117,32 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				if (settings.autoCloseAfterCopy) setBlockMode(false);
 			} else {
 				showToast(STRINGS.clipboardError, 'error');
+			}
+		});
+
+		similarRuleBtn.addEventListener('click', async () => {
+			if (!selectedEl) {
+				showToast(STRINGS.noElementSelected, 'warning');
+				return;
+			}
+			const selector = generateSimilarSelector(selectedEl);
+			if (!selector) {
+				showToast(STRINGS.cannotGenerateSelector, 'error');
+				return;
+			}
+			const selectorQuality = getSelectorQuality(selector, selectedEl);
+			const matchCount = Math.max(selectorQuality.matchCount, 0);
+			if (matchCount > 1 && !confirm(STRINGS.confirmBroadSelector(matchCount))) {
+				return;
+			}
+			const result = await addBlockRule(selector);
+			if (result.success) {
+				showToast(STRINGS.similarRuleReady(matchCount || 1), 'success', 1800);
+				resetPreview();
+				await applyBlocking(false);
+				setBlockMode(false);
+			} else {
+				showToast(result.message || STRINGS.ruleAddError, result.success ? 'success' : 'info');
 			}
 		});
 
