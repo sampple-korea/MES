@@ -235,6 +235,14 @@ async function runMainFlow(browser) {
   await page.waitForTimeout(700);
   const dynamicHidden = await page.locator('.late-ad-slot').evaluate(el => getComputedStyle(el).display === 'none');
   if (!dynamicHidden) throw new Error('dynamic stylesheet blocking did not hide a later matching element');
+  await page.locator('.mes-toast-action', { hasText: '되돌리기' }).last().click();
+  await page.waitForTimeout(500);
+  const rulesAfterUndo = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2') || '[]'));
+  if (rulesAfterUndo.length) throw new Error(`undo did not remove saved rule: ${JSON.stringify(rulesAfterUndo)}`);
+  const restoredAfterUndo = await page.locator('[data-testid="ad-banner"]').first().evaluate(el => getComputedStyle(el).display !== 'none');
+  if (!restoredAfterUndo) throw new Error('undo did not restore the original matching element');
+  const dynamicRestoredAfterUndo = await page.locator('.late-ad-slot').evaluate(el => getComputedStyle(el).display !== 'none');
+  if (!dynamicRestoredAfterUndo) throw new Error('undo did not restore the dynamic matching element');
   if (pageErrors.length) throw new Error(`page errors: ${pageErrors.join(' | ')}`);
   await context.close();
 }
