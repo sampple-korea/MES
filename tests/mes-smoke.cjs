@@ -478,6 +478,26 @@ async function runBlockingGuardFlow(browser) {
   });
   await stylesheetPage.waitForFunction(() => getComputedStyle(document.querySelector('.guard-ad')).display !== 'none', null, { timeout: 5000 });
   await stylesheetPage.waitForFunction(() => getComputedStyle(document.querySelector('.guard-ad')).display === 'none', null, { timeout: 6000 });
+  await stylesheetPage.evaluate(() => {
+    const sheets = Array.from(document.adoptedStyleSheets || []);
+    const targetSheet = sheets.find(sheet => {
+      try {
+        return Array.from(sheet.cssRules || []).some(rule => rule.cssText.includes('.guard-ad'));
+      } catch (error) {
+        return false;
+      }
+    });
+    if (targetSheet) {
+      targetSheet.replaceSync('.guard-ad { display: block !important; }');
+      return;
+    }
+    const node = document.querySelector('style#mes-rule-style[data-mes-style-owner="blocking"]');
+    if (!node?.sheet) throw new Error('MES blocking stylesheet was not found');
+    while (node.sheet.cssRules.length) node.sheet.deleteRule(0);
+    node.sheet.insertRule('.guard-ad { display: block !important; }', 0);
+  });
+  await stylesheetPage.waitForFunction(() => getComputedStyle(document.querySelector('.guard-ad')).display !== 'none', null, { timeout: 5000 });
+  await stylesheetPage.waitForFunction(() => getComputedStyle(document.querySelector('.guard-ad')).display === 'none', null, { timeout: 7000 });
   await stylesheetContext.close();
 
   const { context: inlineContext, page: inlinePage } = await openMesPage(
@@ -503,6 +523,26 @@ async function runBlockingGuardFlow(browser) {
   });
   await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.hidden-watch')).display === 'none', null, { timeout: 5000 });
   await inlineContext.close();
+
+  const { context: shadowContext, page: shadowPage } = await openMesPage(
+    browser,
+    html,
+    { observeDomChanges: true, shadowDomSupport: true, hideStrategy: 'display' },
+    { mobileBlockedSelectors_v2: ['mes.test##.late-shadow-ad'] }
+  );
+  await shadowPage.evaluate(() => {
+    const host = document.querySelector('.class-watch');
+    const root = host.attachShadow({ mode: 'open' });
+    const target = document.createElement('div');
+    target.className = 'late-shadow-ad';
+    target.textContent = 'Late shadow target';
+    root.appendChild(target);
+  });
+  await shadowPage.waitForFunction(() => {
+    const target = document.querySelector('.class-watch')?.shadowRoot?.querySelector('.late-shadow-ad');
+    return target && getComputedStyle(target).display === 'none';
+  }, null, { timeout: 8000 });
+  await shadowContext.close();
 }
 
 async function runLegacyImportFlow(browser) {
