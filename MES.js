@@ -96,8 +96,20 @@
 		inspectorUnavailable: '선택된 요소 정보가 없습니다.',
 		noCookies: '표시할 쿠키가 없습니다.',
 		cookieReadOnly: '보호 모드에서는 쿠키 이름과 마스킹된 값만 표시합니다.',
+		cookieScopeNotice: '브라우저가 공개한 쿠키만 표시됩니다. 수정/삭제는 현재 사이트에서 가능한 범위로 처리됩니다.',
 		cookieValuesMasked: '쿠키 값은 보호됨',
+		cookieCopy: '복사',
+		cookieEdit: '수정',
+		cookieDelete: '삭제',
+		cookieEditPrompt: (name) => `${name} 쿠키의 새 값을 입력하세요. 현재 사이트 path=/ 값으로 저장됩니다.`,
+		cookieDeleteConfirm: (name) => `${name} 쿠키를 삭제할까요?`,
+		cookieUpdated: '쿠키 수정됨',
+		cookieDeleted: '쿠키 삭제됨',
+		cookieActionFailed: '쿠키 작업 실패',
 		resourceMetadataLabel: '리소스 메타데이터',
+		attributePrompt: '추출할 속성 이름을 입력하세요.',
+		attributeCopied: '속성 값 복사됨',
+		attributeNotFound: '속성을 찾을 수 없습니다.',
 		promptCopy: '선택자를 직접 복사하세요:',
 		alreadyHidden: '이미 숨겨진 요소입니다.',
 		previewDifferentElement: '다른 요소가 미리보기 중입니다.',
@@ -961,6 +973,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .inspector-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid rgba(60,60,67,0.10); }
 .inspector-row:last-child { border-bottom: none; }
 .inspector-row span { word-break: break-word; }
+.inspector-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex-shrink: 0; max-width: 46%; }
 .inspector-mini-btn { padding: 4px 8px; min-height: 26px; min-width: auto; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 8px !important; }
 
 #mes-toast-container { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 2147483647 !important; display: flex; flex-direction: column-reverse; align-items: center; gap: 10px; pointer-events: none; width: max-content; max-width: 90%; }
@@ -990,6 +1003,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
     #mobile-block-panel, #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel { width: calc(100% - 24px); padding: 11px 12px; border-radius: 16px !important; }
     .button-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
     .mb-btn { padding: 9px 12px; min-width: 0; }
+    .inspector-row { align-items: flex-start; }
+    .inspector-row-actions { max-width: 44%; gap: 4px; }
+    .inspector-row-actions .inspector-mini-btn, .inspector-mini-btn { padding: 4px 7px; min-height: 26px; font-size: var(--md-sys-typescale-label-small-font-size); }
     .inspector-tabs { grid-template-columns: repeat(3, 1fr); gap: 6px; }
 }
     `;
@@ -2158,6 +2174,22 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 		}
 
+		function looksSensitiveText(value) {
+			const text = String(value || '');
+			return /token|secret|session|auth|bearer|password|passwd|credential|api[-_]?key/i.test(text) ||
+				/[A-Za-z0-9_-]{24,}/.test(text) ||
+				/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(text);
+		}
+
+		function shouldConfirmAttributeCopy(attrName, value) {
+			if (!settings.privacyMode) return false;
+			const name = String(attrName || '').toLowerCase();
+			const urlAttrs = new Set(['href', 'src', 'data-src', 'data-original', 'poster', 'action']);
+			return urlAttrs.has(name) ||
+				/(token|secret|session|auth|cookie|password|passwd|credential|key)/i.test(name) ||
+				looksSensitiveText(value);
+		}
+
 		function getCookieRows() {
 			return document.cookie.split(';').map(cookie => cookie.trim()).filter(Boolean).map(cookie => {
 				const [name = '', ...valueParts] = cookie.split('=');
@@ -2168,6 +2200,54 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					displayValue: maskSensitiveValue(value)
 				};
 			});
+		}
+
+		function isSafeCookieName(name) {
+			return typeof name === 'string' && !!name && !/[=;,\s]/.test(name);
+		}
+
+		function getCookiePathCandidates() {
+			const paths = new Set(['/']);
+			const parts = location.pathname.split('/').filter(Boolean);
+			let current = '';
+			parts.slice(0, -1).forEach(part => {
+				current += `/${part}`;
+				paths.add(current || '/');
+			});
+			paths.add(location.pathname || '/');
+			return Array.from(paths);
+		}
+
+		function getCookieDomainCandidates() {
+			const host = location.hostname;
+			if (!host || host === 'localhost' || /^[\d.]+$/.test(host) || host.includes(':')) return [''];
+			const parts = host.split('.');
+			const domains = new Set(['', host]);
+			for (let index = 1; index < parts.length - 1; index++) {
+				domains.add(parts.slice(index).join('.'));
+			}
+			return Array.from(domains);
+		}
+
+		function setCookieValue(name, value) {
+			if (!isSafeCookieName(name)) return false;
+			const secure = location.protocol === 'https:' ? '; Secure' : '';
+			deleteCookieValue(name);
+			document.cookie = `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax${secure}`;
+			return true;
+		}
+
+		function deleteCookieValue(name) {
+			if (!isSafeCookieName(name)) return false;
+			const expires = 'Thu, 01 Jan 1970 00:00:00 GMT';
+			document.cookie = `${name}=; expires=${expires}; max-age=0`;
+			getCookieDomainCandidates().forEach(domain => {
+				getCookiePathCandidates().forEach(path => {
+					const domainPart = domain ? `; domain=${domain}` : '';
+					document.cookie = `${name}=; path=${path}${domainPart}; expires=${expires}; max-age=0`;
+				});
+			});
+			return true;
 		}
 
 		function formatResourceMetadata(entry) {
@@ -2236,6 +2316,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                         <div class="inspector-section-title">동작</div>
                         <div class="inspector-list">
                             <div class="inspector-row"><span>유사 선택자</span><button class="mb-btn inspector-mini-btn" data-inspector-action="copy-similar">복사</button></div>
+                            <div class="inspector-row"><span>속성 값 추출</span><button class="mb-btn inspector-mini-btn" data-inspector-action="extract-attribute">추출</button></div>
                             <div class="inspector-row"><span>상위 요소 선택</span><button class="mb-btn inspector-mini-btn" data-inspector-action="parent">상위</button></div>
                             <div class="inspector-row"><span>하위 요소 ${children.length}개</span><button class="mb-btn inspector-mini-btn" data-inspector-action="children">보기</button></div>
                         </div>
@@ -2265,9 +2346,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			} else if (tab === 'cookies') {
 				const rows = getCookieRows();
 				inspectorTextSnapshot = rows.map(row => `${row.name}=${row.displayValue}`).join('\n') || STRINGS.noCookies;
-				inspectorContent.innerHTML = rows.length ? `<div class="inspector-section"><div class="inspector-section-title">쿠키</div><pre class="inspector-pre">${escapeHtml(STRINGS.cookieReadOnly)}</pre><div class="inspector-list">${rows.map(row => `
+				inspectorContent.innerHTML = rows.length ? `<div class="inspector-section"><div class="inspector-section-title">쿠키</div><pre class="inspector-pre">${escapeHtml(`${STRINGS.cookieReadOnly}\n${STRINGS.cookieScopeNotice}`)}</pre><div class="inspector-list">${rows.map(row => `
                     <div class="inspector-row">
                         <span><strong>${escapeHtml(row.name)}</strong><br>${escapeHtml(row.displayValue)}</span>
+                        <div class="inspector-row-actions">
+                            <button class="mb-btn inspector-mini-btn" data-cookie-action="copy" data-cookie-name="${encodeURIComponent(row.name)}">${STRINGS.cookieCopy}</button>
+                            <button class="mb-btn inspector-mini-btn" data-cookie-action="edit" data-cookie-name="${encodeURIComponent(row.name)}">${STRINGS.cookieEdit}</button>
+                            <button class="mb-btn inspector-mini-btn error" data-cookie-action="delete" data-cookie-name="${encodeURIComponent(row.name)}">${STRINGS.cookieDelete}</button>
+                        </div>
                     </div>`).join('')}</div></div>` : `<div class="inspector-section">${STRINGS.noCookies}</div>`;
 			} else if (tab === 'diagnostics') {
 				inspectorTextSnapshot = getDiagnosticsText();
@@ -2631,6 +2717,20 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					} else {
 						showToast(STRINGS.cannotGenerateSelector, 'error');
 					}
+				} else if (action === 'extract-attribute') {
+					const attrName = prompt(STRINGS.attributePrompt, 'data-testid');
+					if (!attrName) return;
+					const value = selectedEl?.getAttribute(attrName.trim());
+					if (value === null || value === undefined) {
+						showToast(STRINGS.attributeNotFound, 'info');
+						return;
+					}
+					if (shouldConfirmAttributeCopy(attrName, value) && !confirm(STRINGS.sensitiveCopyConfirm)) return;
+					if (copyToClipboard(value)) {
+						showToast(STRINGS.attributeCopied, 'success');
+					} else {
+						showToast(STRINGS.clipboardError, 'error');
+					}
 				} else if (action === 'parent') {
 					const parent = getParentElement(selectedEl);
 					if (parent && !['body', 'html'].includes(parent.tagName.toLowerCase())) {
@@ -2658,6 +2758,50 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					renderInspector('element');
 				}
 				return;
+			}
+
+			const cookieButton = event.target.closest('[data-cookie-action]');
+			if (cookieButton) {
+				let cookieName = '';
+				try {
+					cookieName = decodeURIComponent(cookieButton.dataset.cookieName || '');
+				} catch (e) {}
+				const cookieRow = getCookieRows().find(row => row.name === cookieName);
+				const action = cookieButton.dataset.cookieAction;
+				if (!cookieName || (action !== 'delete' && !cookieRow)) {
+					showToast(STRINGS.cookieActionFailed, 'error');
+					return;
+				}
+				if (action === 'copy') {
+					if (settings.privacyMode && !confirm(STRINGS.sensitiveCopyConfirm)) return;
+					if (copyToClipboard(cookieRow.value)) {
+						showToast(STRINGS.infoCopied, 'success');
+					} else {
+						showToast(STRINGS.clipboardError, 'error');
+					}
+					return;
+				}
+				if (action === 'edit') {
+					const nextValue = prompt(STRINGS.cookieEditPrompt(cookieName), settings.privacyMode ? '' : cookieRow.value);
+					if (nextValue === null) return;
+					if (setCookieValue(cookieName, nextValue)) {
+						showToast(STRINGS.cookieUpdated, 'success');
+						renderInspector('cookies');
+					} else {
+						showToast(STRINGS.cookieActionFailed, 'error');
+					}
+					return;
+				}
+				if (action === 'delete') {
+					if (!confirm(STRINGS.cookieDeleteConfirm(cookieName))) return;
+					if (deleteCookieValue(cookieName)) {
+						showToast(STRINGS.cookieDeleted, 'info');
+						renderInspector('cookies');
+					} else {
+						showToast(STRINGS.cookieActionFailed, 'error');
+					}
+					return;
+				}
 			}
 
 			const resourceButton = event.target.closest('[data-resource-index]');
