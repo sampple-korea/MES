@@ -15,13 +15,14 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Persistent hide rules with search, copy, current-site cleanup, backup, and restore
 - Shadow DOM selection with host-scoped rules for open shadow roots
 - Dynamic page monitoring that reapplies rules to later DOM and Shadow DOM changes
+- CSS rule hiding mode with inline fallback for sensitive or unsupported selectors
 - Preview/restore flow plus display, visibility, and opacity hiding strategies
 - Element inspector for HTML, computed CSS, script hints, page source, cookies, resources, and diagnostics
 - Temporary focus mode that isolates the selected element and its visible scope for inspection
 - Privacy mode that masks cookies and redacts sensitive resource URLs by default
 - Cookie copy/edit/delete controls for browser-visible cookies, with privacy confirmation on raw value copy
 - URL and arbitrary attribute extraction helpers with sensitive-value confirmation
-- Compact Apple-style mobile UI, tablet-aware layout, switch controls, and gesture or button launcher modes
+- Compact Apple-style mobile UI, auto-minimized picker mode, tablet-aware layout, switch controls, and gesture or button launcher modes
 - Small low-contrast launcher with a fixed 44px touch target and optional shield icon
 
 ## Install
@@ -47,18 +48,20 @@ https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%2
 | `includeSiteName` | true | 차단 규칙에 사이트 이름을 포함할지 여부 |
 | `panelOpacity` | 0.94 | 설정/차단 패널의 투명도 |
 | `toggleSizeScale` | 1.0 | 토글 버튼 크기 비율 |
-| `toggleOpacity` | 1.0 | 토글 버튼 투명도 |
+| `toggleOpacity` | 0.62 | 토글 버튼 투명도 |
 | `showAdguardLogo` | false | AdGuard 로고 표시 여부 |
 | `observeDomChanges` | true | 동적 DOM 변경 시 저장 규칙 재적용 |
 | `shadowDomSupport` | true | open Shadow DOM 내부 요소 탐색 |
 | `selectorHintMode` | true | 안정적인 선택자 힌트 생성 |
 | `privacyMode` | true | 쿠키와 리소스 URL의 민감 정보 보호 |
-| `hideStrategy` | display | 요소 숨김 방식 |
+| `compactPickerMode` | true | 선택 후 패널 자동 축소 |
+| `hideStrategy` | stylesheet | 요소 숨김 방식 |
 
 ## Notes
 
 - MES is optimized for mobile layouts and touch interaction.
 - Some websites may block userscript behavior or rebuild hidden elements dynamically.
+- CSS rule hiding uses constructable stylesheets when available and falls back to owned style nodes or inline hiding for selectors that should not be exposed as rule text.
 - Cookie editing and deletion are limited to cookies exposed by `document.cookie`; HttpOnly cookies and some original Domain/Path/SameSite attributes cannot be inspected by browser userscripts.
 - Back up your rule list before clearing browser storage or changing userscript managers.
 - The project is distributed under the Apache License, Version 2.0. Redistributions must preserve the attribution notices in `NOTICE`.
