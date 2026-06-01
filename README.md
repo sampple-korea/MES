@@ -16,6 +16,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Similar-pattern rule creation for hiding repeated matching elements after confirmation
 - Persistent hide rules with search, copy, current-site cleanup, backup, and restore
 - Immediate undo action after saving a rule, including restoring already-hidden dynamic matches
+- Rule list impact preview by tapping a saved rule to reveal and highlight its current matches
 - Per-rule enable/disable controls for testing selectors without deleting them
 - Shadow DOM selection with host-scoped rules for open shadow roots
 - Dynamic page monitoring that reapplies rules to later DOM and Shadow DOM changes

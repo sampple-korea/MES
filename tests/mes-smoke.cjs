@@ -462,6 +462,14 @@ async function runLegacyImportFlow(browser) {
   if (!otherRow.includes('다른 사이트')) {
     throw new Error(`other-site rule scope chip missing: ${otherRow}`);
   }
+  await page.locator('.blocklist-item').filter({ hasText: '.legacy-ad' }).locator('.blocklist-rule').click();
+  await page.locator('.mes-toast-action', { hasText: '해제' }).last().waitFor({ timeout: 5000 });
+  const previewVisible = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display !== 'none' && el.classList.contains('mes-selector-candidate-match'));
+  if (!previewVisible) throw new Error('saved rule preview did not reveal and mark matching elements');
+  await page.locator('.mes-toast-action', { hasText: '해제' }).last().click();
+  await page.waitForTimeout(350);
+  const previewCleared = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display === 'none' && !el.classList.contains('mes-selector-candidate-match'));
+  if (!previewCleared) throw new Error('saved rule preview did not restore blocking after clearing');
 
   await context.close();
 }
