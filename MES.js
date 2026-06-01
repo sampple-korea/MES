@@ -2,7 +2,7 @@
 // @name         MES(Mobile Element Selector)
 // @author       삼플
 // @version      2.0.0
-// @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
+// @description  작은 화면에서도 깔끔하게 요소를 선택하고 차단 규칙을 관리하는 고급 모바일 요소 선택기
 // @match        *://*/*
 // @license      Apache-2.0
 // @grant        GM_setClipboard
@@ -2132,13 +2132,21 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		restoreTrackedHiddenElements();
 		const declaration = getStyleHideDeclaration(settings.hideStrategy);
 		const buckets = buildStylesheetBuckets(rules, currentHostname);
+		const shadowSelectorBuckets = new Map(buckets.shadowBuckets);
 		let appliedCount = 0;
 		if (buckets.globalSelectors.length) {
 			if (setBlockStyleText(document, `${buckets.globalSelectors.join(',\n')} { ${declaration} }`)) {
 				appliedCount += buckets.globalSelectors.length;
 			}
+			if (settings.shadowDomSupport) {
+				collectOpenShadowRoots(document).forEach(root => {
+					if (!shadowSelectorBuckets.has(root)) shadowSelectorBuckets.set(root, new Set());
+					const selectorSet = shadowSelectorBuckets.get(root);
+					buckets.globalSelectors.forEach(selector => selectorSet.add(selector));
+				});
+			}
 		}
-		buckets.shadowBuckets.forEach((selectorSet, root) => {
+		shadowSelectorBuckets.forEach((selectorSet, root) => {
 			const selectors = Array.from(selectorSet).filter(Boolean);
 			if (!selectors.length) return;
 			if (setBlockStyleText(root, `${selectors.join(',\n')} { ${declaration} }`)) {

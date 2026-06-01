@@ -1,6 +1,6 @@
 # MES (Mobile Element Selector)
 
-Mobile Element Selector is a mobile-first userscript for selecting page elements and saving hide rules from an on-page Material 3 control panel.
+Mobile Element Selector is a mobile-first userscript for selecting page elements and managing hide rules through a compact, polished on-page control panel.
 
 [Greasy Fork](https://greasyfork.org/en/scripts/534270-mes-mobile-element-selector) · [Install script](https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js) · [Source](https://github.com/sampple-korea/MES)
 

@@ -507,10 +507,12 @@ async function runBlockingGuardFlow(browser) {
     { mobileBlockedSelectors_v2: ['mes.test##.inline-guard', 'mes.test##.dynamic-class-ad', 'mes.test###dynamic-id-ad', 'mes.test##.hidden-ad:not([hidden])'] }
   );
   await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display === 'none', null, { timeout: 5000 });
-  await inlinePage.evaluate(() => {
-    document.querySelector('.inline-guard').style.setProperty('display', 'block', 'important');
+  const inlineTamperApplied = await inlinePage.evaluate(() => {
+    const target = document.querySelector('.inline-guard');
+    target.style.setProperty('display', 'block', 'important');
+    return target.style.getPropertyValue('display') === 'block';
   });
-  await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display !== 'none', null, { timeout: 5000 });
+  if (!inlineTamperApplied) throw new Error('Inline style tamper was not applied');
   await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display === 'none', null, { timeout: 5000 });
   await inlinePage.evaluate(() => {
     document.querySelector('.class-watch').classList.add('dynamic-class-ad');
@@ -527,7 +529,7 @@ async function runBlockingGuardFlow(browser) {
   const { context: shadowContext, page: shadowPage } = await openMesPage(
     browser,
     html,
-    { observeDomChanges: true, shadowDomSupport: true, hideStrategy: 'display' },
+    { observeDomChanges: true, shadowDomSupport: true, hideStrategy: 'stylesheet' },
     { mobileBlockedSelectors_v2: ['mes.test##.late-shadow-ad'] }
   );
   await shadowPage.evaluate(() => {
@@ -542,6 +544,20 @@ async function runBlockingGuardFlow(browser) {
     const target = document.querySelector('.class-watch')?.shadowRoot?.querySelector('.late-shadow-ad');
     return target && getComputedStyle(target).display === 'none';
   }, null, { timeout: 8000 });
+  const shadowRuleInjected = await shadowPage.evaluate(() => {
+    const root = document.querySelector('.class-watch')?.shadowRoot;
+    const adoptedRule = Array.from(root?.adoptedStyleSheets || []).some(sheet => {
+      try {
+        return Array.from(sheet.cssRules || []).some(rule => rule.cssText.includes('.late-shadow-ad'));
+      } catch (error) {
+        return false;
+      }
+    });
+    const styleNodeRule = Array.from(root?.querySelectorAll('style#mes-rule-style[data-mes-style-owner="blocking"]') || [])
+      .some(node => node.textContent.includes('.late-shadow-ad'));
+    return adoptedRule || styleNodeRule;
+  });
+  if (!shadowRuleInjected) throw new Error('Late shadow stylesheet rule was not injected');
   await shadowContext.close();
 }
 
