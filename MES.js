@@ -1351,6 +1351,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	let uiGuardObserver = null;
 	let uiGuardScheduled = false;
 	let uiGuardInterval = null;
+	let visibleUiPanel = null;
 
 	function getUiNodes() {
 		return [toastContainer, panel, listPanel, inspectorPanel, settingsPanel, toggleBtn].filter(Boolean);
@@ -1359,12 +1360,40 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	function nodeTouchesMesUi(node) {
 		if (!node) return false;
 		if (node === style) return true;
+		if (node.nodeType === 3 && node.parentNode === style) return true;
 		return getUiNodes().some(uiNode => node === uiNode || node.contains?.(uiNode));
+	}
+
+	function restoreUiNodeIdentity(node, expectedId) {
+		if (!node) return;
+		if (node.id !== expectedId) node.id = expectedId;
+		node.hidden = false;
+		node.removeAttribute('aria-hidden');
+		node.removeAttribute('inert');
+		if (node !== style) {
+			node.classList.add('mobile-block-ui');
+			['display', 'visibility', 'opacity', 'pointer-events'].forEach(prop => node.style.removeProperty(prop));
+		}
+	}
+
+	function restoreUiIdentities() {
+		restoreUiNodeIdentity(style, UI_STYLE_ID);
+		restoreUiNodeIdentity(toastContainer, 'mes-toast-container');
+		restoreUiNodeIdentity(panel, 'mobile-block-panel');
+		restoreUiNodeIdentity(settingsPanel, 'mobile-settings-panel');
+		restoreUiNodeIdentity(listPanel, 'mobile-blocklist-panel');
+		restoreUiNodeIdentity(inspectorPanel, 'mobile-inspector-panel');
+		restoreUiNodeIdentity(toggleBtn, 'mobile-block-toggleBtn');
+		if (visibleUiPanel?.isConnected) {
+			visibleUiPanel.classList.add('visible');
+			visibleUiPanel.style.display = visibleUiPanel === settingsPanel ? 'flex' : 'block';
+		}
 	}
 
 	function ensureUiAttached() {
 		const headTarget = document.head || document.documentElement;
 		const bodyTarget = document.body || document.documentElement;
+		restoreUiIdentities();
 		if (style && headTarget) {
 			if (!style.isConnected || style.parentNode !== headTarget) {
 				headTarget.appendChild(style);
@@ -1397,14 +1426,21 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	function setupUiSelfHealing() {
 		if (uiGuardObserver) uiGuardObserver.disconnect();
 		uiGuardObserver = new MutationObserver(mutations => {
-			if (mutations.some(mutation => Array.from(mutation.removedNodes || []).some(nodeTouchesMesUi))) {
+			const shouldRepair = mutations.some(mutation =>
+				nodeTouchesMesUi(mutation.target) ||
+				Array.from(mutation.removedNodes || []).some(nodeTouchesMesUi)
+			);
+			if (shouldRepair) {
 				scheduleUiGuardCheck();
 			}
 		});
 		try {
 			uiGuardObserver.observe(document.documentElement, {
 				childList: true,
-				subtree: true
+				subtree: true,
+				attributes: true,
+				attributeFilter: ['id', 'class', 'style', 'hidden', 'aria-hidden', 'inert'],
+				characterData: true
 			});
 		} catch (e) {}
 		if (uiGuardInterval) clearInterval(uiGuardInterval);
@@ -2960,6 +2996,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				});
 
 				activePanel = panelElement;
+				visibleUiPanel = panelElement;
 				panelElement.style.display = panelElement === settingsPanel ? 'flex' : 'block';
 				requestAnimationFrame(() => {
 					requestAnimationFrame(() => {
@@ -2968,6 +3005,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				});
 			} else {
 				if (activePanel === panelElement) activePanel = null;
+				if (visibleUiPanel === panelElement) visibleUiPanel = null;
 				panelElement.classList.remove('visible');
 				schedulePanelHide(panelElement);
 			}

@@ -403,7 +403,41 @@ async function runAdvancedFlow(browser) {
     const button = document.querySelector('#mobile-block-toggleBtn');
     const panel = document.querySelector('#mobile-block-panel');
     const style = document.querySelector('#mes-ui-style');
-    return button && panel && style && style.textContent.includes('#mobile-block-toggleBtn');
+    return button && panel && style && style.textContent.includes('#mobile-block-toggleBtn') &&
+      panel.classList.contains('visible') &&
+      button.classList.contains('mobile-block-ui') &&
+      panel.classList.contains('mobile-block-ui');
+  }, null, { timeout: 5000 });
+  await page.evaluate(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    const panel = document.querySelector('#mobile-block-panel');
+    const uiStyle = document.querySelector('#mes-ui-style');
+    button.id = 'broken-toggle';
+    button.className = '';
+    button.hidden = true;
+    button.style.setProperty('display', 'none', 'important');
+    panel.id = 'broken-panel';
+    panel.className = '';
+    panel.hidden = true;
+    panel.style.setProperty('display', 'none', 'important');
+    uiStyle.id = 'broken-style';
+    uiStyle.textContent = '';
+  });
+  await page.waitForFunction(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    const panel = document.querySelector('#mobile-block-panel');
+    const style = document.querySelector('#mes-ui-style');
+    if (!button || !panel || !style) return false;
+    const buttonStyle = getComputedStyle(button);
+    const panelStyle = getComputedStyle(panel);
+    return !button.hidden &&
+      !panel.hidden &&
+      button.classList.contains('mobile-block-ui') &&
+      panel.classList.contains('mobile-block-ui') &&
+      panel.classList.contains('visible') &&
+      style.textContent.includes('#mobile-block-toggleBtn') &&
+      buttonStyle.display !== 'none' &&
+      panelStyle.display !== 'none';
   }, null, { timeout: 5000 });
 
   await context.close();
