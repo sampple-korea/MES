@@ -24,7 +24,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Privacy mode that masks cookies and redacts sensitive resource URLs by default
 - Cookie copy/edit/delete controls for browser-visible cookies, with privacy confirmation on raw value copy
 - URL and arbitrary attribute extraction helpers with sensitive-value confirmation
-- Compact Apple-style mobile UI, auto-minimized picker mode, tablet-aware layout, switch controls, and gesture or button launcher modes
+- Compact Apple-style mobile UI, auto-minimized picker mode, smart top/bottom docking, tablet-aware layout, switch controls, and gesture or button launcher modes
 - Small low-contrast launcher with a fixed 44px touch target and optional shield icon
 
 ## Install

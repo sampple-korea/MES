@@ -942,6 +942,8 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 }
 
 #mobile-block-panel { bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); left: 50%; transform: translateX(-50%) translateY(100px) scale(0.95); z-index: 2147483645 !important; }
+#mobile-block-panel.dock-bottom { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); transform: translateX(-50%) translateY(100px) scale(0.95); }
+#mobile-block-panel.dock-top { top: calc(env(safe-area-inset-top, 0px) + 16px); bottom: auto; transform: translateX(-50%) translateY(-100px) scale(0.95); }
 #mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.94); z-index: 2147483647 !important; max-width: 310px; max-height: 76vh; overflow-y: auto; }
 #mobile-settings-panel { flex-direction: column; overflow: hidden; max-height: min(70vh, 560px); }
 
@@ -1086,7 +1088,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #mobile-block-panel.compact-picker .nav-step-btn .mes-icon,
 #mobile-block-panel.compact-picker .primary-action-grid .mes-icon { display: inline-block; width: 14px; height: 14px; opacity: 0.78; }
 #mobile-block-panel.compact-picker .primary-action-grid { margin-top: 0; display: flex; justify-content: center; gap: 8px; }
-#mobile-block-panel.compact-picker #blocker-more { display: none !important; }
+#mobile-block-panel.compact-picker.has-selection #blocker-more { display: none !important; }
 #mobile-block-panel.compact-picker .mb-slider::-webkit-slider-thumb { width: 16px; height: 16px; }
 #mobile-block-panel.compact-picker .mb-slider::-moz-range-thumb { width: 16px; height: 16px; }
 
@@ -2191,6 +2193,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		function setPickerCompact(compact) {
 			pickerCompact = !!compact;
 			panel.classList.toggle('compact-picker', pickerCompact);
+			if (pickerCompact) {
+				secondaryActions?.classList.remove('visible');
+				moreBtn?.classList.remove('active');
+			}
 			if (compactToggleBtn) {
 				compactToggleBtn.setAttribute('aria-label', pickerCompact ? STRINGS.expandPanel : STRINGS.minimizePanel);
 				compactToggleBtn.title = pickerCompact ? STRINGS.expandPanel : STRINGS.minimizePanel;
@@ -2200,6 +2206,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		function updateCompactSummary(labelText = '') {
 			if (!compactSummary) return;
+			panel.classList.toggle('has-selection', !!selectedEl);
 			if (!selectedEl) {
 				compactSummary.textContent = STRINGS.noElementSelected;
 				return;
@@ -2207,6 +2214,21 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			const tag = selectedEl.tagName.toLowerCase();
 			const identity = selectedEl.id ? `#${selectedEl.id}` : getStableClasses(selectedEl).slice(0, 2).map(className => `.${className}`).join('');
 			compactSummary.textContent = labelText || `${tag}${identity}`;
+		}
+
+		function updatePickerDocking() {
+			if (!panel || panel.dataset.wasDragged === 'true') return;
+			const viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+			const rect = selectedEl?.getBoundingClientRect?.();
+			const targetMidY = rect ? rect.top + rect.height / 2 : viewportHeight / 2;
+			const dockTop = !!rect && (targetMidY > viewportHeight * 0.54 || rect.bottom > viewportHeight - 180);
+			panel.classList.toggle('dock-top', dockTop);
+			panel.classList.toggle('dock-bottom', !dockTop);
+			panel.style.left = '50%';
+			panel.style.right = 'auto';
+			panel.style.top = '';
+			panel.style.bottom = '';
+			panel.style.transform = '';
 		}
 
 		function removeSelectionHighlight() {
@@ -2219,6 +2241,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (info) info.textContent = '';
 			if (selectorMeta) selectorMeta.innerHTML = '';
 			if (navLabel) navLabel.textContent = '';
+			updateCompactSummary();
 		}
 
 		function resetPreview() {
@@ -2358,6 +2381,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				initialTouchedElement = el;
 			}
 			applySelectionHighlight(selectedEl);
+			updatePickerDocking();
 			refreshNavigationSlider();
 			updateInfo();
 			if (settings.compactPickerMode && !keepOrigin) {
@@ -2943,8 +2967,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			updateToggleIcon();
 
 			if (enabled) {
+				updatePickerDocking();
 				setPanelVisibility(panel, true);
-				if (!selectedEl) setPickerCompact(false);
+				setPickerCompact(!!settings.compactPickerMode);
 				if (selectedEl) {
 					applySelectionHighlight(selectedEl);
 				}
@@ -3045,6 +3070,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		childBtn.addEventListener('click', () => moveNavigation(1));
 
 		moreBtn.addEventListener('click', () => {
+			if (pickerCompact) {
+				setPickerCompact(false);
+			}
 			secondaryActions.classList.toggle('visible');
 			moreBtn.classList.toggle('active', secondaryActions.classList.contains('visible'));
 		});
