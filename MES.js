@@ -75,6 +75,7 @@
 		launcherModeLabel: '열기 방식',
 		launcherButton: '버튼',
 		launcherGesture: '제스처',
+		launcherGestureReady: (label) => `제스처 열기: ${label}`,
 		gestureFingerCountLabel: '손가락',
 		gestureTapCountLabel: '탭 횟수',
 		gestureTwoFingers: '두 손가락',
@@ -1011,11 +1012,16 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
     -webkit-mask-image: linear-gradient(to bottom, black 0%, black 92%, transparent 100%);
     mask-image: linear-gradient(to bottom, black 0%, black 92%, transparent 100%);
 
-    scrollbar-width: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(60,60,67,0.24) transparent;
     -ms-overflow-style: none;
 }
 .scrollable-container::-webkit-scrollbar {
-    display: none;
+    width: 4px;
+}
+.scrollable-container::-webkit-scrollbar-thumb {
+    background: rgba(60,60,67,0.20);
+    border-radius: 999px;
 }
 
 .mobile-block-ui { z-index: 2147483646 !important; touch-action: manipulation !important; font-family: var(--md-sys-typescale-body-large-font-family); box-sizing: border-box; position: fixed !important; visibility: visible !important; color: var(--md-sys-color-on-surface); -webkit-tap-highlight-color: transparent !important; }
@@ -1185,7 +1191,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #mobile-block-panel.compact-picker #blocker-compact-summary { opacity: 1; padding-left: 4px; }
 #mobile-block-panel.compact-picker .picker-compact-btn { width: 30px; min-width: 30px; height: 28px; min-height: 28px; background-color: rgba(118,118,128,0.10); }
 #mobile-block-panel.compact-picker .element-nav-row { display: grid; grid-template-columns: 30px minmax(88px, 1fr) 30px; gap: 6px; margin: 2px 0 6px; }
-#mobile-block-panel.compact-picker .element-nav-row .mb-slider { height: 3px; }
+#mobile-block-panel.compact-picker .element-nav-row .mb-slider { height: 28px; background-size: 100% 3px; background-repeat: no-repeat; background-position: center; }
 #mobile-block-panel.compact-picker #blocker-slider { touch-action: pan-x !important; }
 #mobile-block-panel.compact-picker .nav-step-btn,
 #mobile-block-panel.compact-picker .primary-action-grid .mb-btn { width: 30px; min-width: 30px; height: 28px; min-height: 28px; padding: 0 !important; border-radius: 999px !important; }
@@ -1193,7 +1199,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #mobile-block-panel.compact-picker .nav-step-btn .mes-icon,
 #mobile-block-panel.compact-picker .primary-action-grid .mes-icon { display: inline-block; width: 14px; height: 14px; opacity: 0.78; }
 #mobile-block-panel.compact-picker .primary-action-grid { margin-top: 0; display: flex; justify-content: center; gap: 8px; }
-#mobile-block-panel.compact-picker.has-selection #blocker-more { display: none !important; }
 #mobile-block-panel.compact-picker .mb-slider::-webkit-slider-thumb { width: 16px; height: 16px; }
 #mobile-block-panel.compact-picker .mb-slider::-moz-range-thumb { width: 16px; height: 16px; }
 
@@ -1214,6 +1219,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #settings-close, #settings-backup, #settings-restore { width: 100%; margin-top: 8px; }
 #settings-restore-input { display: none; }
 
+.launcher-settings-item { padding-top: 2px; }
 .launcher-mode-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 2px; margin-top: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
 .launcher-mode-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; background: transparent; color: var(--md-sys-color-on-surface-variant); }
 .launcher-mode-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
@@ -1316,11 +1322,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
     #mobile-inspector-panel { max-width: 560px; }
     .button-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .primary-action-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-    .secondary-action-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .secondary-action-grid { grid-template-columns: repeat(7, minmax(0, 1fr)); }
     .inspector-tabs { grid-template-columns: repeat(6, 1fr); }
     #inspector-content { max-height: 62vh; }
     .settings-layout { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; align-items: start; }
-    .settings-layout .settings-section-title, .settings-layout .button-grid { grid-column: 1 / -1; }
+    .settings-layout .settings-section-title, .settings-layout .button-grid, .settings-layout .launcher-settings-item { grid-column: 1 / -1; }
     .settings-layout .settings-item { margin-bottom: 14px; }
     .settings-item label { font-size: var(--md-sys-typescale-body-large-font-size); }
 }
@@ -1494,6 +1500,29 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             <h3 class="mb-panel-title">${STRINGS.settingsTitle}</h3>
             <div class="scrollable-container settings-layout settings-scroll">
             <div class="settings-section-title">기본</div>
+            <div class="settings-item launcher-settings-item">
+                 <label><span class="settings-label-text">${STRINGS.launcherModeLabel}</span></label>
+                 <div class="launcher-mode-grid" role="radiogroup" aria-label="${STRINGS.launcherModeLabel}">
+                     <button data-launcher-mode="button" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherButton}</button>
+                     <button data-launcher-mode="gesture" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherGesture}</button>
+                 </div>
+                 <div id="gesture-detail-settings" class="gesture-detail-panel ${settings.hideToggleButton ? 'visible' : ''}">
+                     <div class="gesture-detail-row">
+                         <span class="gesture-detail-label">${STRINGS.gestureFingerCountLabel}</span>
+                         <div class="gesture-option-grid" role="radiogroup" aria-label="${STRINGS.gestureFingerCountLabel}">
+                             <button data-gesture-fingers="2" class="mb-btn gesture-option-btn gesture-finger-btn" role="radio">${STRINGS.gestureTwoFingers}</button>
+                             <button data-gesture-fingers="3" class="mb-btn gesture-option-btn gesture-finger-btn" role="radio">${STRINGS.gestureThreeFingers}</button>
+                         </div>
+                     </div>
+                     <div class="gesture-detail-row">
+                         <span class="gesture-detail-label">${STRINGS.gestureTapCountLabel}</span>
+                         <div class="gesture-option-grid" role="radiogroup" aria-label="${STRINGS.gestureTapCountLabel}">
+                             <button data-gesture-taps="2" class="mb-btn gesture-option-btn gesture-tap-btn" role="radio">${STRINGS.gestureTwoTaps}</button>
+                             <button data-gesture-taps="3" class="mb-btn gesture-option-btn gesture-tap-btn" role="radio">${STRINGS.gestureThreeTaps}</button>
+                         </div>
+                     </div>
+                 </div>
+            </div>
             <div class="settings-item">
                 <label><span class="settings-label-text">${STRINGS.includeSiteNameLabel}</span>
                     <button id="settings-toggle-site" class="mb-btn mes-switch ${settings.includeSiteName ? 'active' : ''}" role="switch" aria-checked="${settings.includeSiteName}" aria-label="${STRINGS.includeSiteNameLabel}"><span class="switch-knob"></span></button>
@@ -1540,29 +1569,6 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 <label><span class="settings-label-text">${STRINGS.compactPickerModeLabel}</span>
                     <button id="settings-compact-picker" class="mb-btn mes-switch ${settings.compactPickerMode ? 'active' : ''}" role="switch" aria-checked="${settings.compactPickerMode}" aria-label="${STRINGS.compactPickerModeLabel}"><span class="switch-knob"></span></button>
                 </label>
-            </div>
-            <div class="settings-item">
-                 <label><span class="settings-label-text">${STRINGS.launcherModeLabel}</span></label>
-                 <div class="launcher-mode-grid" role="radiogroup" aria-label="${STRINGS.launcherModeLabel}">
-                     <button data-launcher-mode="button" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherButton}</button>
-                     <button data-launcher-mode="gesture" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherGesture}</button>
-                 </div>
-                 <div id="gesture-detail-settings" class="gesture-detail-panel ${settings.hideToggleButton ? 'visible' : ''}">
-                     <div class="gesture-detail-row">
-                         <span class="gesture-detail-label">${STRINGS.gestureFingerCountLabel}</span>
-                         <div class="gesture-option-grid" role="radiogroup" aria-label="${STRINGS.gestureFingerCountLabel}">
-                             <button data-gesture-fingers="2" class="mb-btn gesture-option-btn gesture-finger-btn" role="radio">${STRINGS.gestureTwoFingers}</button>
-                             <button data-gesture-fingers="3" class="mb-btn gesture-option-btn gesture-finger-btn" role="radio">${STRINGS.gestureThreeFingers}</button>
-                         </div>
-                     </div>
-                     <div class="gesture-detail-row">
-                         <span class="gesture-detail-label">${STRINGS.gestureTapCountLabel}</span>
-                         <div class="gesture-option-grid" role="radiogroup" aria-label="${STRINGS.gestureTapCountLabel}">
-                             <button data-gesture-taps="2" class="mb-btn gesture-option-btn gesture-tap-btn" role="radio">${STRINGS.gestureTwoTaps}</button>
-                             <button data-gesture-taps="3" class="mb-btn gesture-option-btn gesture-tap-btn" role="radio">${STRINGS.gestureThreeTaps}</button>
-                         </div>
-                     </div>
-                 </div>
             </div>
             <div class="settings-section-title">UI</div>
             <div class="settings-item">
@@ -3677,7 +3683,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						childList: true,
 						subtree: true,
 						attributes: true,
-						attributeFilter: ['style'],
+						attributeFilter: ['style', 'class', 'id', 'hidden'],
 						characterData: true
 					});
 					observedMutationRoots.add(root);
@@ -3700,6 +3706,12 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					if (nodeTouchesOwnedBlockStyle(mutation.target)) return true;
 					return Array.from(mutation.removedNodes || []).some(nodeTouchesOwnedBlockStyle);
 				});
+				const hasSelectorAttributeChange = mutations.some(mutation => {
+					return mutation.type === 'attributes' &&
+						['class', 'id', 'hidden'].includes(mutation.attributeName) &&
+						mutation.target?.nodeType === 1 &&
+						!isMesInternalNode(mutation.target);
+				});
 				const hasPageChange = mutations.some(mutation => {
 					const target = mutation.target;
 					if (!target || isMesInternalNode(target)) return false;
@@ -3708,15 +3720,17 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				if (hasBlockingTamper) {
 					scheduleBlockingIntegrityCheck(60);
 				}
-				if (!hasPageChange) return;
-				mutations.forEach(mutation => {
-					Array.from(mutation.addedNodes || []).forEach(node => {
-						if (node.nodeType === 1 && !isMesInternalNode(node) && (node.shadowRoot || node.querySelector?.('*'))) {
-							shouldRefreshRoots = true;
-						}
+				if (!hasPageChange && !hasSelectorAttributeChange) return;
+				if (hasPageChange) {
+					mutations.forEach(mutation => {
+						Array.from(mutation.addedNodes || []).forEach(node => {
+							if (node.nodeType === 1 && !isMesInternalNode(node) && (node.shadowRoot || node.querySelector?.('*'))) {
+								shouldRefreshRoots = true;
+							}
+						});
 					});
-				});
-				if (shouldRefreshRoots) observeOpenShadowRoots(document);
+					if (shouldRefreshRoots) observeOpenShadowRoots(document);
+				}
 
 				clearTimeout(domObserverTimer);
 				domObserverTimer = setTimeout(() => {
@@ -4238,6 +4252,12 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			});
 		}
 
+		function getGestureShortcutLabel() {
+			const fingers = settings.gestureFingerCount === 3 ? STRINGS.gestureThreeFingers : STRINGS.gestureTwoFingers;
+			const taps = settings.gestureTapCount === 3 ? STRINGS.gestureThreeTaps : STRINGS.gestureTwoTaps;
+			return `${fingers} ${taps}`;
+		}
+
 		async function refreshLegacyImportControls() {
 			if (!legacyImportItem || !legacyImportSummary || !legacyImportBtn) return null;
 			const candidates = await getLegacyImportCandidates();
@@ -4315,7 +4335,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				settings.twoFingerGesture = useGesture;
 				updateLauncherModeButtons();
 				await saveSettings();
-				showToast(STRINGS.settingsSaved, 'info', 1500);
+				showToast(useGesture ? STRINGS.launcherGestureReady(getGestureShortcutLabel()) : STRINGS.settingsSaved, 'info', 1800);
 			});
 		});
 		updateLauncherModeButtons();
