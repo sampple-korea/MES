@@ -13,8 +13,8 @@
 // @grant        GM.setValue
 // @grant        GM.getValue
 // @namespace https://github.com/sampple-korea/MES
-// @downloadURL https://raw.githubusercontent.com/sampple-korea/MES/main/MES.js
-// @updateURL https://raw.githubusercontent.com/sampple-korea/MES/main/MES.js
+// @downloadURL https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
+// @updateURL https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
 // ==/UserScript==
 
 (async function() {

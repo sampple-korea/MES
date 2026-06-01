@@ -2,7 +2,7 @@
 
 MES는 모바일 브라우저에서 웹페이지 요소를 직접 선택하고 숨김 규칙을 관리할 수 있는 고급 userscript입니다. 작은 화면에서도 덜 가리는 컴팩트한 패널, 안정적인 선택자 생성, 저장 규칙 관리, 동적 페이지 재적용을 중심으로 설계했습니다.
 
-[GitHub에서 설치](https://raw.githubusercontent.com/sampple-korea/MES/main/MES.js) · [소스 코드](https://github.com/sampple-korea/MES)
+[GitHub에서 설치](https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js) · [소스 코드](https://github.com/sampple-korea/MES)
 
 ## 2.0.1
 
@@ -59,7 +59,7 @@ MES 2.0.1은 2.0.0 기반에 GitHub 설치/업데이트 경로, 한국어 README
 Tampermonkey, Violentmonkey 같은 userscript 매니저를 설치한 뒤 아래 주소를 열어 설치하세요.
 
 ```text
-https://raw.githubusercontent.com/sampple-korea/MES/main/MES.js
+https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
 ```
 
 업데이트도 같은 GitHub 주소를 사용합니다.
