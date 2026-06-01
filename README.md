@@ -2,7 +2,7 @@
 
 Mobile Element Selector is a mobile-first userscript for selecting page elements and managing hide rules through a compact, polished on-page control panel.
 
-[Greasy Fork](https://greasyfork.org/en/scripts/534270-mes-mobile-element-selector) · [Install script](https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js) · [Source](https://github.com/sampple-korea/MES)
+[Install from GitHub](https://raw.githubusercontent.com/sampple-korea/MES/main/MES.js) · [Source](https://github.com/sampple-korea/MES)
 
 ## 2.0.0
 
@@ -45,7 +45,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 Install a compatible userscript manager, then open the install URL:
 
 ```text
-https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js
+https://raw.githubusercontent.com/sampple-korea/MES/main/MES.js
 ```
 
 ## Usage

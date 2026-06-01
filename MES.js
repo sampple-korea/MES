@@ -13,8 +13,8 @@
 // @grant        GM.setValue
 // @grant        GM.getValue
 // @namespace https://github.com/sampple-korea/MES
-// @downloadURL https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js
-// @updateURL https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.meta.js
+// @downloadURL https://raw.githubusercontent.com/sampple-korea/MES/main/MES.js
+// @updateURL https://raw.githubusercontent.com/sampple-korea/MES/main/MES.js
 // ==/UserScript==
 
 (async function() {
