@@ -1137,7 +1137,7 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 #blocker-info-label { display: block; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; font-weight: 600; }
 #blocker-info { display: block; color: var(--md-sys-color-on-surface); font-size: var(--md-sys-typescale-label-medium-font-size); line-height: 1.4; word-break: break-all; min-height: 1.4em; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; max-height: 4.2em; overflow-y: auto; }
 #blocker-info:empty::after { content: '없음'; color: var(--md-sys-color-on-surface-variant); font-style: italic; }
-#blocker-nav-label { min-height: 1.25em; margin-top: -4px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: center; }
+#blocker-nav-label { min-height: 1.25em; margin-top: -3px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: center; padding: 3px 8px; border-radius: 999px; background: rgba(118,118,128,0.08); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .element-nav-row { display: grid; grid-template-columns: 44px 1fr 44px; gap: 6px; align-items: center; margin-top: 6px; }
 .element-nav-row .mb-slider { margin: 0; background: linear-gradient(to right, rgba(0,122,255,0.32) 0%, rgba(0,122,255,0.32) var(--nav-progress, 50%), rgba(120,120,128,0.20) var(--nav-progress, 50%), rgba(120,120,128,0.20) 100%); }
 .element-nav-row .mb-slider:disabled { opacity: 0.45; }
@@ -1161,6 +1161,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #mobile-block-panel.compact-picker .picker-compact-btn { width: 30px; min-width: 30px; height: 28px; min-height: 28px; background-color: rgba(118,118,128,0.10); }
 #mobile-block-panel.compact-picker .element-nav-row { display: grid; grid-template-columns: 30px minmax(88px, 1fr) 30px; gap: 6px; margin: 2px 0 6px; }
 #mobile-block-panel.compact-picker .element-nav-row .mb-slider { height: 3px; }
+#mobile-block-panel.compact-picker #blocker-slider { touch-action: pan-x !important; }
 #mobile-block-panel.compact-picker .nav-step-btn,
 #mobile-block-panel.compact-picker .primary-action-grid .mb-btn { width: 30px; min-width: 30px; height: 28px; min-height: 28px; padding: 0 !important; border-radius: 999px !important; }
 #mobile-block-panel.compact-picker .primary-action-grid .btn-label { display: none; }
@@ -2429,7 +2430,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 			const tag = selectedEl.tagName.toLowerCase();
 			const identity = selectedEl.id ? `#${selectedEl.id}` : getStableClasses(selectedEl).slice(0, 2).map(className => `.${className}`).join('');
-			compactSummary.textContent = labelText || `${tag}${identity}`;
+			const compactLabel = labelText && labelText.includes(': ')
+				? labelText.replace(': ', ' · ')
+				: labelText;
+			compactSummary.textContent = compactLabel || `${tag}${identity}`;
 		}
 
 		function updatePickerDocking() {
@@ -2536,6 +2540,45 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			updateCompactSummary();
 		}
 
+		function isNavigationCandidate(el) {
+			if (!el || el.nodeType !== 1 || el.closest?.('.mobile-block-ui')) return false;
+			try {
+				const style = window.getComputedStyle(el);
+				if (style.display === 'none' || style.visibility === 'hidden') return false;
+				const rect = el.getBoundingClientRect();
+				return rect.width >= 4 && rect.height >= 4;
+			} catch (e) {
+				return true;
+			}
+		}
+
+		function getNavigationDescendants(originEl, maxDepth = 3, limit = 12) {
+			if (!originEl || limit <= 0) return [];
+			const result = [];
+			const queue = getChildElements(originEl).map(child => ({ el: child, depth: 1 }));
+			while (queue.length && result.length < limit) {
+				const { el, depth } = queue.shift();
+				if (!el || el === originEl || el.closest?.('.mobile-block-ui')) continue;
+				if (depth < maxDepth) {
+					getChildElements(el).forEach(child => queue.push({ el: child, depth: depth + 1 }));
+				}
+				if (!isNavigationCandidate(el)) continue;
+				result.push(el);
+			}
+			return result;
+		}
+
+		function getDescendantDepth(el, originEl) {
+			if (!el || !originEl || el === originEl) return 0;
+			let current = el;
+			let depth = 0;
+			while (current && current !== originEl && depth < 12) {
+				current = getParentElement(current);
+				depth += 1;
+			}
+			return current === originEl ? depth : 0;
+		}
+
 		function buildNavigationItems(originEl) {
 			if (!originEl) return [];
 			const parents = [];
@@ -2546,8 +2589,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				if (!parent || ['body', 'html'].includes(parent.tagName?.toLowerCase()) || parent.closest?.('.mobile-block-ui')) break;
 				current = parent;
 			}
-			const children = getChildElements(originEl);
-			return [...parents, ...children];
+			const seen = new Set(parents);
+			const descendants = getNavigationDescendants(originEl).filter(child => {
+				if (seen.has(child)) return false;
+				seen.add(child);
+				return true;
+			});
+			return [...parents, ...descendants];
 		}
 
 		function getElementLabel(el, originEl, items = null) {
@@ -2560,7 +2608,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (currentIndex >= 0 && originIndex >= 0) {
 				if (currentIndex === originIndex) return `${STRINGS.navRoot}: ${tag}${suffix}`;
 				if (currentIndex < originIndex) return `${STRINGS.navParent} ${originIndex - currentIndex}단계: ${tag}${suffix}`;
-				return `${STRINGS.navChild} ${currentIndex - originIndex}: ${tag}${suffix}`;
+				return `${STRINGS.navChild} ${getDescendantDepth(el, originEl) || currentIndex - originIndex}단계: ${tag}${suffix}`;
 			}
 			if (el === originEl) return `${STRINGS.navRoot}: ${tag}${suffix}`;
 			if (getParentElement(el) === originEl) return `${STRINGS.navChild}: ${tag}${suffix}`;
@@ -2619,8 +2667,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 			applySelectionHighlight(selectedEl);
 			updatePickerDocking();
-			refreshNavigationSlider();
 			updateInfo();
+			refreshNavigationSlider();
 			if (settings.compactPickerMode && !keepOrigin) {
 				setPickerCompact(true);
 			}
@@ -3853,8 +3901,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 		bindBooleanSetting(shadowDomBtn, 'shadowDomSupport', () => {
 			if (selectedEl) {
-				refreshNavigationSlider();
 				updateInfo();
+				refreshNavigationSlider();
 			}
 		});
 		bindBooleanSetting(selectorHintsBtn, 'selectorHintMode', () => {
