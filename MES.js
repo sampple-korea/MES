@@ -4,7 +4,7 @@
 // @version      1.2.8
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
-// @license      MIT
+// @license      Apache-2.0
 // @grant        GM_setClipboard
 // @grant        GM_setValue
 // @grant        GM_getValue
