@@ -112,6 +112,8 @@
 		clipboardError: '클립보드 복사 실패',
 		similarSelectorCopied: '유사 선택자 복사됨',
 		similarRuleReady: (count) => `유사 규칙 ${count}개 대상`,
+		selectorCandidateCopied: '선택자 후보 복사됨',
+		selectorCandidateSaved: (count) => `후보 규칙 저장됨 · ${count}개 대상`,
 		noChildElements: '하위 요소가 없습니다.',
 		inspectorUnavailable: '선택된 요소 정보가 없습니다.',
 		noCookies: '표시할 쿠키가 없습니다.',
@@ -1229,6 +1231,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .inspector-row span { word-break: break-word; }
 .inspector-row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex-shrink: 0; max-width: 46%; }
 .inspector-mini-btn { padding: 4px 8px; min-height: 26px; min-width: auto; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 8px !important; }
+.selector-candidate-list { display: flex; flex-direction: column; gap: 8px; }
+.selector-candidate-row { display: grid; gap: 6px; padding: 8px; border-radius: 10px; background: rgba(255,255,255,0.54); border: 0.5px solid rgba(60,60,67,0.08); }
+.selector-candidate-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.selector-candidate-title { font-weight: 700; color: var(--md-sys-color-on-surface); font-size: var(--md-sys-typescale-label-medium-font-size); }
+.selector-candidate-meta { color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); white-space: nowrap; }
+.selector-candidate-selector { margin: 0; padding: 7px 8px; border-radius: 8px; background: rgba(118,118,128,0.08); color: var(--md-sys-color-on-surface-variant); font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; font-size: var(--md-sys-typescale-label-small-font-size); line-height: 1.35; white-space: pre-wrap; word-break: break-all; }
+.selector-candidate-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.selector-candidate-actions .mb-btn { min-height: 28px; padding: 5px 8px; font-size: var(--md-sys-typescale-label-small-font-size); }
 
 #mes-toast-container { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 2147483647 !important; display: flex; flex-direction: column-reverse; align-items: center; gap: 10px; pointer-events: none; width: max-content; max-width: 90%; }
 .mes-toast { background-color: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); padding: 10px 14px; border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.18); font-size: var(--md-sys-typescale-label-large-font-size); opacity: 0; transform: translateY(14px); transition: opacity 0.24s ease, transform 0.24s ease, background-color 0.24s ease; pointer-events: all; max-width: 100%; text-align: center; }
@@ -2206,6 +2216,78 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		return simplified || selector;
 	}
 
+	function getResourceSelectorCandidate(el) {
+		let current = el;
+		for (let depth = 0; depth < 5 && current && current.nodeType === 1; depth++) {
+			const tagName = current.tagName.toLowerCase();
+			for (const attrName of RESOURCE_ATTRIBUTES) {
+				const value = current.getAttribute?.(attrName);
+				if (!value || value.length > 260) continue;
+				try {
+					const url = new URL(value, location.href);
+					const fileName = url.pathname.split('/').filter(Boolean).pop();
+					const token = fileName || url.hostname;
+					if (token && token.length >= 4 && !DYNAMIC_TOKEN_RE.test(token)) {
+						return createShadowScopedSelector(current, `${tagName}[${attrName}*="${escapeAttributeValue(token)}"]`);
+					}
+				} catch (e) {
+					if (value.length >= 4 && !DYNAMIC_TOKEN_RE.test(value)) {
+						return createShadowScopedSelector(current, `${tagName}[${attrName}*="${escapeAttributeValue(value.slice(0, 80))}"]`);
+					}
+				}
+			}
+			current = getParentElement(current);
+		}
+		return '';
+	}
+
+	function buildSelectorCandidates(el) {
+		if (!el || el.nodeType !== 1) return [];
+		const candidates = [];
+		const seen = new Set();
+		const root = getSelectorRoot(el);
+		const tagName = el.tagName.toLowerCase();
+
+		const addCandidate = (label, selector, intent) => {
+			const cleanSelector = typeof selector === 'string' ? selector.trim() : '';
+			if (!cleanSelector || seen.has(cleanSelector)) return;
+			const quality = getSelectorQuality(cleanSelector, el);
+			if (quality.matchCount <= 0) return;
+			seen.add(cleanSelector);
+			candidates.push({
+				label,
+				selector: cleanSelector,
+				intent,
+				matchCount: quality.matchCount,
+				quality: quality.quality,
+				qualityText: quality.text
+			});
+		};
+
+		const precise = generateElementSelector(el, 7, true);
+		addCandidate('정밀', precise, '단일 요소 저장에 적합');
+		addCandidate('패턴', generateSimilarSelector(el), '반복되는 카드나 광고 묶음에 적합');
+
+		if (settings.selectorHintMode) {
+			const attrSelector = getBestAttributePart(el, tagName, root, false);
+			if (attrSelector) {
+				addCandidate('속성', createShadowScopedSelector(el, attrSelector), '안정적인 속성 기반');
+			}
+			const broadHint = getBroadSelectorHint(el, tagName, root);
+			if (broadHint) {
+				addCandidate('힌트', createShadowScopedSelector(el, broadHint), '광고성 이름 패턴 기반');
+			}
+		}
+
+		const stableClasses = getStableClasses(el);
+		if (stableClasses.length) {
+			addCandidate('클래스', createShadowScopedSelector(el, `${tagName}.${stableClasses.map(cssEscape).join('.')}`), '레이아웃 클래스 기반');
+		}
+		addCandidate('리소스', getResourceSelectorCandidate(el), 'URL 또는 미디어 속성 기반');
+
+		return candidates.slice(0, 6);
+	}
+
 	function getSelectorQuality(selector, el) {
 		const root = getSelectorRoot(el);
 		const matchCount = countSelectorMatches(selector, root);
@@ -3009,12 +3091,17 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (tab === 'element') {
 				const selector = selectedEl ? generateElementSelector(selectedEl, 7, true) : '';
 				const similar = selectedEl ? generateSimilarSelector(selectedEl) : '';
+				const selectorCandidates = selectedEl ? buildSelectorCandidates(selectedEl) : [];
 				const children = selectedEl ? getChildElements(selectedEl) : [];
-				inspectorTextSnapshot = formatElementSummary(selectedEl);
+				const elementSummary = formatElementSummary(selectedEl);
+				inspectorTextSnapshot = elementSummary;
+				if (selectorCandidates.length) {
+					inspectorTextSnapshot += `\n\n선택자 후보\n${selectorCandidates.map(candidate => `[${candidate.label}] ${candidate.selector} (${candidate.qualityText})`).join('\n')}`;
+				}
 				inspectorContent.innerHTML = `
                     <div class="inspector-section">
                         <div class="inspector-section-title">요약</div>
-                        <pre class="inspector-pre">${escapeHtml(inspectorTextSnapshot)}</pre>
+                        <pre class="inspector-pre">${escapeHtml(elementSummary)}</pre>
                     </div>
                     <div class="inspector-section">
                         <div class="inspector-section-title">동작</div>
@@ -3027,9 +3114,23 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                         </div>
                     </div>
                     <div class="inspector-section">
-                        <div class="inspector-section-title">복사 후보</div>
-                        <pre class="inspector-pre">${escapeHtml([selector, similar && similar !== selector ? similar : ''].filter(Boolean).join('\n'))}</pre>
+                        <div class="inspector-section-title">선택자 후보</div>
+                        <div class="selector-candidate-list">
+                            ${selectorCandidates.map((candidate, index) => `
+                                <div class="selector-candidate-row">
+                                    <div class="selector-candidate-head">
+                                        <span class="selector-candidate-title">${escapeHtml(candidate.label)}</span>
+                                        <span class="selector-candidate-meta">${escapeHtml(candidate.qualityText)}</span>
+                                    </div>
+                                    <pre class="selector-candidate-selector">${escapeHtml(candidate.selector)}</pre>
+                                    <div class="selector-candidate-actions">
+                                        <button class="mb-btn outline" data-inspector-action="copy-candidate" data-candidate-index="${index}">복사</button>
+                                        <button class="mb-btn secondary" data-inspector-action="save-candidate" data-candidate-index="${index}">저장</button>
+                                    </div>
+                                </div>`).join('') || `<pre class="inspector-pre">${escapeHtml([selector, similar && similar !== selector ? similar : ''].filter(Boolean).join('\n'))}</pre>`}
+                        </div>
                     </div>`;
+				inspectorContent._mesSelectorCandidates = selectorCandidates;
 			} else if (tab === 'code') {
 				const html = getFormattedOuterHtml(selectedEl);
 				const css = getComputedStyleSummary(selectedEl);
@@ -3465,6 +3566,33 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						showToast(STRINGS.similarSelectorCopied, 'success');
 					} else {
 						showToast(STRINGS.cannotGenerateSelector, 'error');
+					}
+				} else if (action === 'copy-candidate' || action === 'save-candidate') {
+					const candidateIndex = parseInt(actionButton.dataset.candidateIndex, 10);
+					const candidate = inspectorContent._mesSelectorCandidates?.[candidateIndex];
+					if (!candidate?.selector) {
+						showToast(STRINGS.cannotGenerateSelector, 'error');
+						return;
+					}
+					if (action === 'copy-candidate') {
+						if (copyToClipboard(candidate.selector)) {
+							showToast(STRINGS.selectorCandidateCopied, 'success');
+						} else {
+							showToast(STRINGS.clipboardError, 'error');
+						}
+						return;
+					}
+					if (candidate.matchCount > 1 && !confirm(STRINGS.confirmBroadSelector(candidate.matchCount))) {
+						return;
+					}
+					const result = await addBlockRule(candidate.selector);
+					if (result.success) {
+						disableAllBlocking(false);
+						await applyBlocking(false);
+						showToast(STRINGS.selectorCandidateSaved(candidate.matchCount || 1), 'success', 1800);
+						renderInspector('element');
+					} else {
+						showToast(result.message, result.message === STRINGS.ruleExists ? 'info' : 'error');
 					}
 				} else if (action === 'extract-attribute') {
 					const attrName = prompt(STRINGS.attributePrompt, 'data-testid');
