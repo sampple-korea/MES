@@ -23,7 +23,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Dynamic page monitoring that reapplies rules to later DOM, class/id/hidden attribute, and Shadow DOM changes
 - Blocking integrity guard that restores stylesheet and inline hides if a page tampers with them
 - CSS rule hiding mode with inline fallback for sensitive or unsupported selectors
-- Self-healing controls that restore the selector UI if a page removes its nodes or styles
+- Self-healing controls that restore the selector UI if a page removes or tampers with its nodes, IDs, classes, hidden state, or styles
 - Preview/restore flow plus display, visibility, and opacity hiding strategies
 - Element inspector for HTML, computed CSS, script hints, page source, cookies, resources, and diagnostics
 - Temporary focus mode that isolates the selected element and its visible scope for inspection
