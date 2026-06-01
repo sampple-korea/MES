@@ -25,7 +25,8 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Privacy mode that masks cookies and redacts sensitive resource URLs by default
 - Cookie copy/edit/delete controls for browser-visible cookies, with privacy confirmation on raw value copy
 - URL and arbitrary attribute extraction helpers with sensitive-value confirmation
-- Compact Apple-style mobile UI, auto-minimized picker mode, smart top/bottom docking, tablet-aware layout, switch controls, and gesture or button launcher modes
+- Compact Apple-style mobile UI, auto-minimized picker mode, smart top/bottom docking, magnetic panel snapping, tablet-aware layout, switch controls, and gesture or button launcher modes
+- Detected legacy filter import for bringing existing per-site rules into MES without showing extra controls when no data exists
 - Small low-contrast launcher with a fixed 44px touch target and optional shield icon
 
 ## Install
@@ -57,7 +58,7 @@ https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%2
 | `shadowDomSupport` | true | open Shadow DOM 내부 요소 탐색 |
 | `selectorHintMode` | true | 안정적인 선택자 힌트 생성 |
 | `privacyMode` | true | 쿠키와 리소스 URL의 민감 정보 보호 |
-| `compactPickerMode` | true | 선택 후 패널 자동 축소 |
+| `compactPickerMode` | true | 요소 선택 후 패널 자동 축소 |
 | `hideStrategy` | stylesheet | 요소 숨김 방식 |
 
 ## Notes

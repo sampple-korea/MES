@@ -5,7 +5,7 @@ const { chromium } = require('playwright');
 const repoRoot = path.resolve(__dirname, '..');
 const scriptText = fs.readFileSync(path.join(repoRoot, 'MES.js'), 'utf8');
 
-async function openMesPage(browser, html, settings = {}) {
+async function openMesPage(browser, html, settings = {}, extraStorage = {}) {
   const context = await browser.newContext({
     viewport: { width: 390, height: 844 },
     isMobile: true,
@@ -23,12 +23,93 @@ async function openMesPage(browser, html, settings = {}) {
     body: html
   }));
   await page.goto('http://mes.test/', { waitUntil: 'domcontentloaded' });
-  await page.evaluate(value => {
-    localStorage.setItem('mobileElementSelectorSettings_v1_2', JSON.stringify(value));
-  }, settings);
+  await page.evaluate(({ settings, extraStorage }) => {
+    localStorage.setItem('mobileElementSelectorSettings_v1_2', JSON.stringify(settings));
+    Object.entries(extraStorage).forEach(([key, value]) => {
+      localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+    });
+  }, { settings, extraStorage });
   await page.addScriptTag({ content: scriptText });
   await page.waitForSelector('#mobile-block-toggleBtn', { state: 'visible', timeout: 5000 });
   return { context, page, pageErrors };
+}
+
+async function dragByTouch(page, selector, deltaX, deltaY) {
+  await page.locator(selector).evaluate((el, { deltaX, deltaY }) => {
+    const rect = el.getBoundingClientRect();
+    const startX = rect.left + rect.width / 2;
+    const startY = rect.top + rect.height / 2;
+
+    function touchAt(x, y) {
+      return {
+        identifier: 1,
+        target: el,
+        clientX: x,
+        clientY: y,
+        pageX: x + window.scrollX,
+        pageY: y + window.scrollY,
+        screenX: x,
+        screenY: y,
+        radiusX: 1,
+        radiusY: 1,
+        rotationAngle: 0,
+        force: 0.5
+      };
+    }
+
+    function send(type, x, y, active) {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      const changedTouch = touchAt(x, y);
+      Object.defineProperty(event, 'touches', { value: active ? [changedTouch] : [] });
+      Object.defineProperty(event, 'targetTouches', { value: active ? [changedTouch] : [] });
+      Object.defineProperty(event, 'changedTouches', { value: [changedTouch] });
+      el.dispatchEvent(event);
+    }
+
+    send('touchstart', startX, startY, true);
+    send('touchmove', startX + deltaX, startY + deltaY, true);
+    send('touchend', startX + deltaX, startY + deltaY, false);
+  }, { deltaX, deltaY });
+  await page.waitForTimeout(260);
+}
+
+async function fireLauncherGesture(page, fingerCount, tapCount) {
+  await page.evaluate(({ fingerCount, tapCount }) => {
+    function touchAt(index) {
+      const x = 80 + index * 34;
+      const y = 120;
+      return {
+        identifier: index + 1,
+        target: document.body,
+        clientX: x,
+        clientY: y,
+        pageX: x + window.scrollX,
+        pageY: y + window.scrollY,
+        screenX: x,
+        screenY: y,
+        radiusX: 1,
+        radiusY: 1,
+        rotationAngle: 0,
+        force: 0.5
+      };
+    }
+
+    function send(type, touches) {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      const activeTouches = type === 'touchend' ? [] : touches;
+      Object.defineProperty(event, 'touches', { value: activeTouches });
+      Object.defineProperty(event, 'targetTouches', { value: activeTouches });
+      Object.defineProperty(event, 'changedTouches', { value: touches });
+      document.body.dispatchEvent(event);
+    }
+
+    for (let tap = 0; tap < tapCount; tap += 1) {
+      const touches = Array.from({ length: fingerCount }, (_, index) => touchAt(index));
+      send('touchstart', touches);
+      send('touchend', touches);
+    }
+  }, { fingerCount, tapCount });
+  await page.waitForTimeout(120);
 }
 
 async function runMainFlow(browser) {
@@ -58,17 +139,50 @@ async function runMainFlow(browser) {
   });
 
   await page.locator('#mobile-block-toggleBtn').click();
-  await page.waitForSelector('#mobile-block-panel.visible.compact-picker', { timeout: 5000 });
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  const compactOnStart = await page.locator('#mobile-block-panel').evaluate(panel => panel.classList.contains('compact-picker'));
+  if (compactOnStart) throw new Error('picker should not start in compact mode');
+  const clippedPrimaryLabels = await page.locator('#mobile-block-panel .primary-action-grid .btn-label').evaluateAll(labels => labels
+    .filter(label => label.offsetParent !== null && (label.scrollWidth > label.clientWidth + 1 || label.scrollHeight > label.clientHeight + 1))
+    .map(label => label.textContent.trim()));
+  if (clippedPrimaryLabels.length) throw new Error(`primary action labels are clipped: ${clippedPrimaryLabels.join(', ')}`);
   await page.locator('#blocker-more').click();
   await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
   await page.locator('#blocker-settings').click();
   await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+
+  const importHiddenWithoutSource = await page.locator('#settings-legacy-import-item').evaluate(el => el.hidden);
+  if (!importHiddenWithoutSource) throw new Error('legacy import menu should stay hidden without source data');
+
+  const gestureDetailHidden = await page.locator('#gesture-detail-settings').evaluate(el => !el.classList.contains('visible'));
+  if (!gestureDetailHidden) throw new Error('gesture details should be hidden in button launcher mode');
+  await page.locator('[data-launcher-mode="gesture"]').click();
+  await page.waitForFunction(() => document.querySelector('#gesture-detail-settings')?.classList.contains('visible'), null, { timeout: 5000 });
+  await page.locator('[data-gesture-fingers="3"]').click();
+  await page.locator('[data-gesture-taps="3"]').click();
+  const gestureSettings = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileElementSelectorSettings_v1_2')));
+  if (!gestureSettings.hideToggleButton || gestureSettings.gestureFingerCount !== 3 || gestureSettings.gestureTapCount !== 3) {
+    throw new Error(`gesture settings were not saved: ${JSON.stringify(gestureSettings)}`);
+  }
   await page.locator('#settings-close').click();
   await page.waitForTimeout(250);
+  await page.locator('#blocker-cancel').click();
+  await page.waitForTimeout(200);
+  await fireLauncherGesture(page, 3, 2);
+  const openedTooEarly = await page.locator('#mobile-block-panel').evaluate(panel => panel.classList.contains('visible'));
+  if (openedTooEarly) throw new Error('three-tap gesture opened after two taps');
+  await fireLauncherGesture(page, 3, 1);
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  const gestureOpenedCompact = await page.locator('#mobile-block-panel').evaluate(panel => panel.classList.contains('compact-picker'));
+  if (gestureOpenedCompact) throw new Error('gesture-opened picker should not start in compact mode');
+  const selectedAfterGesture = await page.locator('#blocker-info').innerText();
+  if (selectedAfterGesture.trim()) throw new Error(`gesture launch selected an element: ${selectedAfterGesture}`);
+  await page.waitForTimeout(300);
 
   const targetBox = await page.locator('[data-testid="ad-banner"]').boundingBox();
   await page.touchscreen.tap(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
   await page.waitForTimeout(250);
+  await page.waitForSelector('#mobile-block-panel.visible.compact-picker', { timeout: 5000 });
   const selected = await page.locator('#blocker-info').innerText();
   if (!selected.trim()) throw new Error('touch selection did not populate selector');
 
@@ -107,11 +221,14 @@ async function runAdvancedFlow(browser) {
 
   const { context, page } = await openMesPage(browser, html, { compactPickerMode: true });
   await page.locator('#mobile-block-toggleBtn').click();
-  await page.waitForSelector('#mobile-block-panel.visible.compact-picker', { timeout: 5000 });
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  const advancedCompactOnStart = await page.locator('#mobile-block-panel').evaluate(panel => panel.classList.contains('compact-picker'));
+  if (advancedCompactOnStart) throw new Error('advanced picker should not start in compact mode');
 
   const topBox = await page.locator('.top-card').boundingBox();
   await page.touchscreen.tap(topBox.x + topBox.width / 2, topBox.y + topBox.height / 2);
   await page.waitForTimeout(250);
+  await page.waitForSelector('#mobile-block-panel.visible.compact-picker', { timeout: 5000 });
   const topDockedBottom = await page.locator('#mobile-block-panel').evaluate(panel => panel.classList.contains('dock-bottom'));
   if (!topDockedBottom) throw new Error('top target did not keep picker docked bottom');
 
@@ -120,6 +237,32 @@ async function runAdvancedFlow(browser) {
   await page.waitForTimeout(250);
   const bottomDockedTop = await page.locator('#mobile-block-panel').evaluate(panel => panel.classList.contains('dock-top'));
   if (!bottomDockedTop) throw new Error('bottom target did not move picker to top');
+
+  await dragByTouch(page, '#mobile-block-panel', 0, -520);
+  const topSnap = await page.locator('#mobile-block-panel').evaluate(panel => {
+    const rect = panel.getBoundingClientRect();
+    return {
+      anchor: panel.dataset.snapAnchor,
+      top: rect.top,
+      centerOffset: Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2)
+    };
+  });
+  if (topSnap.anchor !== 'top-center' || topSnap.top > 24 || topSnap.centerOffset > 2) {
+    throw new Error(`panel did not snap to top center: ${JSON.stringify(topSnap)}`);
+  }
+
+  await dragByTouch(page, '#mobile-block-panel', 0, 720);
+  const bottomSnap = await page.locator('#mobile-block-panel').evaluate(panel => {
+    const rect = panel.getBoundingClientRect();
+    return {
+      anchor: panel.dataset.snapAnchor,
+      bottomGap: window.innerHeight - rect.bottom,
+      centerOffset: Math.abs(rect.left + rect.width / 2 - window.innerWidth / 2)
+    };
+  });
+  if (bottomSnap.anchor !== 'bottom-center' || bottomSnap.bottomGap > 24 || bottomSnap.centerOffset > 2) {
+    throw new Error(`panel did not snap to bottom center: ${JSON.stringify(bottomSnap)}`);
+  }
 
   await page.evaluate(() => {
     document.querySelector('#mobile-block-toggleBtn').remove();
@@ -136,11 +279,73 @@ async function runAdvancedFlow(browser) {
   await context.close();
 }
 
+async function runLegacyImportFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        .legacy-ad { min-height: 96px; padding: 20px; border-radius: 12px; background: #fff2d8; }
+      </style>
+    </head>
+    <body>
+      <main>
+        <section class="legacy-ad">Imported rule target</section>
+        <section>Content</section>
+      </main>
+    </body>
+  </html>`;
+
+  const legacyKey = ['pi', 'cky_blocked_rules'].join('');
+  const { context, page } = await openMesPage(browser, html, { compactPickerMode: true }, {
+    [legacyKey]: {
+      'mes.test': ['.legacy-ad', '.legacy-ad'],
+      'other.example': ['.global-ad']
+    },
+    mobileBlockedSelectors_v2: ['other.example##.global-ad']
+  });
+
+  await page.locator('#mobile-block-toggleBtn').click();
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  const importCompactOnStart = await page.locator('#mobile-block-panel').evaluate(panel => panel.classList.contains('compact-picker'));
+  if (importCompactOnStart) throw new Error('import flow picker should not start in compact mode');
+  await page.locator('#blocker-more').click();
+  await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+  await page.locator('#blocker-settings').click();
+  await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+  await page.waitForFunction(() => {
+    const item = document.querySelector('#settings-legacy-import-item');
+    return item && !item.hidden;
+  }, null, { timeout: 5000 });
+
+  const summary = await page.locator('#legacy-import-summary').innerText();
+  if (!summary.includes('새 규칙 1개')) throw new Error(`legacy import summary mismatch: ${summary}`);
+  await page.locator('#settings-legacy-import').click();
+  await page.waitForTimeout(500);
+
+  const importedRules = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2')));
+  if (!importedRules.includes('mes.test##.legacy-ad') || !importedRules.includes('other.example##.global-ad')) {
+    throw new Error(`legacy rule was not imported: ${JSON.stringify(importedRules)}`);
+  }
+  if (importedRules.filter(rule => rule === 'other.example##.global-ad').length !== 1) {
+    throw new Error(`pre-existing rule was duplicated: ${JSON.stringify(importedRules)}`);
+  }
+  const hidden = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display === 'none');
+  if (!hidden) throw new Error('imported legacy rule was not applied');
+  const importDisabled = await page.locator('#settings-legacy-import').evaluate(button => button.disabled);
+  if (!importDisabled) throw new Error('legacy import button should be disabled after importing all rules');
+
+  await context.close();
+}
+
 async function run() {
   const browser = await chromium.launch({ headless: true });
   try {
     await runMainFlow(browser);
     await runAdvancedFlow(browser);
+    await runLegacyImportFlow(browser);
   } finally {
     await browser.close();
   }
