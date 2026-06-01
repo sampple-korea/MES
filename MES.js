@@ -22,6 +22,10 @@
 	const SCRIPT_ID = "[MES v1.3.0 M3]";
 	const HIGHLIGHT_CLASS = 'mes-selected-element';
 	const LEGACY_HIGHLIGHT_CLASS = 'selected-element';
+	const ISOLATE_ACTIVE_CLASS = 'mes-isolate-active';
+	const ISOLATE_PATH_CLASS = 'mes-isolate-path';
+	const ISOLATE_TARGET_CLASS = 'mes-isolate-target';
+	const ISOLATE_HOST_CLASS = 'mes-isolate-host';
 	const TOGGLE_BASE_SIZE = 34;
 	const TOGGLE_HITBOX_SIZE = 44;
 	const TOGGLE_MIN_VISUAL_SCALE = 0.85;
@@ -84,6 +88,10 @@
 		noRules: '저장된 규칙이 없습니다.',
 		noElementSelected: '선택된 요소가 없습니다.',
 		cannotGenerateSelector: '유효한 선택자를 생성할 수 없습니다.',
+		isolateFocus: '집중 보기',
+		restoreFocus: '집중 해제',
+		focusModeOn: '선택 요소만 표시 중',
+		focusModeOff: '집중 보기 해제됨',
 		selectorCopied: '선택자가 복사되었습니다.',
 		ruleCopied: '규칙 복사됨',
 		urlCopied: 'URL 복사됨',
@@ -561,7 +569,7 @@
 				!DYNAMIC_TOKEN_RE.test(c) &&
 				!/^[A-Z0-9]{4,}$/.test(c) &&
 				!c.includes('--') && !c.includes('__') &&
-				![HIGHLIGHT_CLASS, LEGACY_HIGHLIGHT_CLASS, 'mobile-block-ui'].some(uiClass => c.includes(uiClass)))
+				![HIGHLIGHT_CLASS, LEGACY_HIGHLIGHT_CLASS, ISOLATE_PATH_CLASS, ISOLATE_TARGET_CLASS, ISOLATE_HOST_CLASS, 'mobile-block-ui'].some(uiClass => c.includes(uiClass)))
 			.slice(0, 2);
 	}
 
@@ -688,6 +696,88 @@
 	function clearSelectionHighlight(el) {
 		if (!el) return;
 		el.classList.remove(HIGHLIGHT_CLASS);
+	}
+
+	function ensureIsolationStyle(root = document) {
+		const styleId = 'mes-isolation-style';
+		if (root.getElementById?.(styleId)) return;
+		const isolateStyle = document.createElement('style');
+		isolateStyle.id = styleId;
+		isolateStyle.textContent = isShadowRoot(root) ? `
+:host(.${ISOLATE_HOST_CLASS}) * {
+    visibility: hidden !important;
+}
+:host(.${ISOLATE_HOST_CLASS}) .${ISOLATE_PATH_CLASS},
+:host(.${ISOLATE_HOST_CLASS}) .${ISOLATE_TARGET_CLASS},
+:host(.${ISOLATE_HOST_CLASS}) .${ISOLATE_TARGET_CLASS} * {
+    visibility: visible !important;
+}` : `
+html.${ISOLATE_ACTIVE_CLASS} body * {
+    visibility: hidden !important;
+}
+html.${ISOLATE_ACTIVE_CLASS} .${ISOLATE_PATH_CLASS},
+html.${ISOLATE_ACTIVE_CLASS} .${ISOLATE_TARGET_CLASS},
+html.${ISOLATE_ACTIVE_CLASS} .${ISOLATE_TARGET_CLASS} *,
+html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui,
+html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
+    visibility: visible !important;
+}`;
+		(root.head || root).appendChild(isolateStyle);
+	}
+
+	function clearIsolation() {
+		document.documentElement.classList.remove(ISOLATE_ACTIVE_CLASS);
+		isolationElements.forEach(el => {
+			el?.classList?.remove(ISOLATE_PATH_CLASS, ISOLATE_TARGET_CLASS);
+		});
+		isolationHosts.forEach(host => {
+			host?.classList?.remove(ISOLATE_HOST_CLASS);
+		});
+		isolationElements.clear();
+		isolationHosts.clear();
+		isIsolationActive = false;
+	}
+
+	function markIsolationPath(el, root) {
+		let current = el;
+		while (current && current.nodeType === 1) {
+			current.classList.add(ISOLATE_PATH_CLASS);
+			isolationElements.add(current);
+			if (current === root?.body || current.parentElement === null) break;
+			current = current.parentElement;
+		}
+	}
+
+	function applyIsolation(el) {
+		if (!el || el.closest?.('.mobile-block-ui')) return false;
+		clearIsolation();
+		ensureIsolationStyle(document);
+		document.documentElement.classList.add(ISOLATE_ACTIVE_CLASS);
+		let current = el;
+		let firstTarget = true;
+		while (current && current.nodeType === 1) {
+			const root = typeof current.getRootNode === 'function' ? current.getRootNode() : document;
+			if (isShadowRoot(root)) {
+				ensureIsolationStyle(root);
+				if (firstTarget) {
+					current.classList.add(ISOLATE_TARGET_CLASS);
+					firstTarget = false;
+				}
+				markIsolationPath(current, root);
+				root.host.classList.add(ISOLATE_HOST_CLASS);
+				isolationHosts.add(root.host);
+				current = root.host;
+			} else {
+				if (firstTarget) {
+					current.classList.add(ISOLATE_TARGET_CLASS);
+					firstTarget = false;
+				}
+				markIsolationPath(current, document);
+				break;
+			}
+		}
+		isIsolationActive = true;
+		return true;
 	}
 
 	const style = document.createElement('style');
@@ -1243,6 +1333,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	let selecting = false;
 	let selectedEl = null;
 	let initialTouchedElement = null;
+	let isIsolationActive = false;
+	const isolationElements = new Set();
+	const isolationHosts = new Set();
 	let touchStartX = 0,
 		touchStartY = 0,
 		touchMoved = false;
@@ -1679,6 +1772,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		let previewedElement = null;
 
 		function removeSelectionHighlight() {
+			clearIsolation();
 			if (selectedEl) {
 				clearSelectionHighlight(selectedEl);
 			}
@@ -2057,8 +2151,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		function getFormattedOuterHtml(el) {
 			if (!el) return '';
 			const clone = el.cloneNode(true);
-			clone.classList?.remove(HIGHLIGHT_CLASS);
-			clone.querySelectorAll?.(`.${HIGHLIGHT_CLASS}, .mobile-block-ui`).forEach(node => node.remove());
+			clone.classList?.remove(HIGHLIGHT_CLASS, ISOLATE_PATH_CLASS, ISOLATE_TARGET_CLASS, ISOLATE_HOST_CLASS);
+			clone.querySelectorAll?.(`.${HIGHLIGHT_CLASS}, .${ISOLATE_PATH_CLASS}, .${ISOLATE_TARGET_CLASS}, .${ISOLATE_HOST_CLASS}, .mobile-block-ui`).forEach(node => {
+				if (node.classList?.contains('mobile-block-ui')) node.remove();
+				else node.classList?.remove(HIGHLIGHT_CLASS, ISOLATE_PATH_CLASS, ISOLATE_TARGET_CLASS, ISOLATE_HOST_CLASS);
+			});
 			const raw = clone.outerHTML || '';
 			let indent = 0;
 			let formatted = '';
@@ -2317,6 +2414,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                         <div class="inspector-list">
                             <div class="inspector-row"><span>유사 선택자</span><button class="mb-btn inspector-mini-btn" data-inspector-action="copy-similar">복사</button></div>
                             <div class="inspector-row"><span>속성 값 추출</span><button class="mb-btn inspector-mini-btn" data-inspector-action="extract-attribute">추출</button></div>
+                            <div class="inspector-row"><span>선택 범위 집중</span><button class="mb-btn inspector-mini-btn" data-inspector-action="toggle-isolation">${isIsolationActive ? STRINGS.restoreFocus : STRINGS.isolateFocus}</button></div>
                             <div class="inspector-row"><span>상위 요소 선택</span><button class="mb-btn inspector-mini-btn" data-inspector-action="parent">상위</button></div>
                             <div class="inspector-row"><span>하위 요소 ${children.length}개</span><button class="mb-btn inspector-mini-btn" data-inspector-action="children">보기</button></div>
                         </div>
@@ -2731,6 +2829,16 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					} else {
 						showToast(STRINGS.clipboardError, 'error');
 					}
+				} else if (action === 'toggle-isolation') {
+					if (isIsolationActive) {
+						clearIsolation();
+						showToast(STRINGS.focusModeOff, 'info', 1400);
+					} else if (selectedEl && applyIsolation(selectedEl)) {
+						showToast(STRINGS.focusModeOn, 'info', 1400);
+					} else {
+						showToast(STRINGS.noElementSelected, 'warning');
+					}
+					renderInspector('element');
 				} else if (action === 'parent') {
 					const parent = getParentElement(selectedEl);
 					if (parent && !['body', 'html'].includes(parent.tagName.toLowerCase())) {
