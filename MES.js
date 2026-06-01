@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플
-// @version      2.0.0
+// @version      2.0.1
 // @description  작은 화면에서도 깔끔하게 요소를 선택하고 차단 규칙을 관리하는 고급 모바일 요소 선택기
 // @match        *://*/*
 // @license      Apache-2.0
@@ -19,7 +19,7 @@
 
 (async function() {
 	'use strict';
-	const SCRIPT_ID = "[MES v2.0.0]";
+	const SCRIPT_ID = "[MES v2.0.1]";
 	const HIGHLIGHT_CLASS = 'mes-selected-element';
 	const LEGACY_HIGHLIGHT_CLASS = 'selected-element';
 	const CANDIDATE_PREVIEW_CLASS = 'mes-selector-candidate-match';
@@ -4606,7 +4606,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					return;
 				}
 				const jsonString = JSON.stringify({
-					version: '2.0.0',
+					version: '2.0.1',
 					exportedAt: new Date().toISOString(),
 					settings,
 					rules,
