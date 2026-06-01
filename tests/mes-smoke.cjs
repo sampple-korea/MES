@@ -141,12 +141,13 @@ async function runMainFlow(browser) {
         main { padding: 20px; display: grid; gap: 14px; }
         .hero, .ad-banner, .content-card { padding: 24px; border-radius: 12px; background: white; }
         .ad-banner { background: #fff2d8; border: 1px solid #ffd48a; min-height: 110px; }
+        .ad-inner { display: block; margin-top: 74px; padding: 8px; border-radius: 8px; background: rgba(255,255,255,0.45); }
       </style>
     </head>
     <body>
       <main>
         <section class="hero">Hero</section>
-        <section class="ad-banner promoted-slot" data-testid="ad-banner">Ad</section>
+        <section class="ad-banner promoted-slot" data-testid="ad-banner">Ad <span class="ad-inner">Nested marker</span></section>
         <section class="content-card">Content</section>
       </main>
     </body>
@@ -206,6 +207,19 @@ async function runMainFlow(browser) {
   if (!compactSliderBox || compactSliderBox.width < 80 || compactSliderBox.height < 2) {
     throw new Error(`compact navigation slider is not usable: ${JSON.stringify(compactSliderBox)}`);
   }
+  const navMax = await page.locator('#blocker-slider').evaluate(slider => Number(slider.max));
+  if (navMax < 2) throw new Error(`navigation slider did not include descendant candidates: max=${navMax}`);
+  await page.locator('#blocker-parent').click();
+  await page.waitForTimeout(100);
+  const parentSummary = await page.locator('#blocker-compact-summary').innerText();
+  if (!parentSummary.includes('상위')) throw new Error(`compact parent navigation summary was not updated: ${parentSummary}`);
+  await page.locator('#blocker-child').click();
+  await page.locator('#blocker-child').click();
+  await page.waitForTimeout(100);
+  const childSummary = await page.locator('#blocker-compact-summary').innerText();
+  if (!childSummary.includes('하위')) throw new Error(`compact child navigation summary was not updated: ${childSummary}`);
+  await page.locator('#blocker-parent').click();
+  await page.waitForTimeout(100);
   const selected = await page.locator('#blocker-info').innerText();
   if (!selected.trim()) throw new Error('touch selection did not populate selector');
 
