@@ -116,6 +116,10 @@
 		selectorCandidateCopied: '선택자 후보 복사됨',
 		selectorCandidatePreview: (count) => `후보 ${count}개 요소 표시 중`,
 		selectorCandidateSaved: (count) => `후보 규칙 저장됨 · ${count}개 대상`,
+		undoAction: '되돌리기',
+		ruleUndoComplete: '규칙 저장 취소됨',
+		ruleUndoUnavailable: '되돌릴 규칙이 없습니다.',
+		ruleUndoFailed: '규칙 저장 취소 실패',
 		noChildElements: '하위 요소가 없습니다.',
 		inspectorUnavailable: '선택된 요소 정보가 없습니다.',
 		noCookies: '표시할 쿠키가 없습니다.',
@@ -1260,10 +1264,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .selector-candidate-actions .mb-btn { min-height: 28px; padding: 5px 8px; font-size: var(--md-sys-typescale-label-small-font-size); }
 
 #mes-toast-container { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%); z-index: 2147483647 !important; display: flex; flex-direction: column-reverse; align-items: center; gap: 10px; pointer-events: none; width: max-content; max-width: 90%; }
-.mes-toast { background-color: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); padding: 10px 14px; border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.18); font-size: var(--md-sys-typescale-label-large-font-size); opacity: 0; transform: translateY(14px); transition: opacity 0.24s ease, transform 0.24s ease, background-color 0.24s ease; pointer-events: all; max-width: 100%; text-align: center; }
+.mes-toast { background-color: var(--md-sys-color-inverse-surface); color: var(--md-sys-color-inverse-on-surface); padding: 9px 10px 9px 14px; border-radius: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.18); font-size: var(--md-sys-typescale-label-large-font-size); opacity: 0; transform: translateY(14px); transition: opacity 0.24s ease, transform 0.24s ease, background-color 0.24s ease; pointer-events: all; max-width: 100%; text-align: center; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.mes-toast-message { min-width: 0; overflow-wrap: anywhere; word-break: keep-all; line-height: 1.25; }
+.mes-toast-action { border: 0; border-radius: 999px; padding: 5px 9px; min-height: 28px; background: rgba(255,255,255,0.16); color: inherit; font: inherit; font-size: var(--md-sys-typescale-label-small-font-size); font-weight: 700; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+.mes-toast-action:active { transform: scale(0.97); }
 .mes-toast.show { opacity: 1; transform: translateY(0); }
 .mes-toast.info { background-color: rgba(28,28,30,0.92); color: white; }
-.mes-toast.success { background-color: var(--md-sys-color-success-container); color: var(--md-sys-color-success); }
+.mes-toast.success { background-color: rgba(28,28,30,0.92); color: #ffffff; }
+.mes-toast.success .mes-toast-action { background: rgba(52,199,89,0.18); color: #b8f7c2; }
 .mes-toast.error { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .mes-toast.warning { background-color: rgba(255,149,0,0.14); color: #9a5a00; }
 
@@ -1595,23 +1603,22 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		applyBlocking();
 	}
 
-	function showToast(message, type = 'info', duration = 3000) {
+	function showToast(message, type = 'info', duration = 3000, action = null) {
 		if (!toastContainer) {
 			console.warn(SCRIPT_ID, "Toast container not ready for message:", message);
 			return;
 		}
 		const toast = document.createElement('div');
 		toast.className = `mes-toast ${type}`;
-		toast.textContent = message;
-		toastContainer.appendChild(toast);
+		const messageNode = document.createElement('span');
+		messageNode.className = 'mes-toast-message';
+		messageNode.textContent = message;
+		toast.appendChild(messageNode);
 
-		void toast.offsetWidth;
-
-		requestAnimationFrame(() => {
-			toast.classList.add('show');
-		});
-
-		setTimeout(() => {
+		let dismissed = false;
+		const dismissToast = () => {
+			if (dismissed) return;
+			dismissed = true;
 			toast.classList.remove('show');
 			toast.addEventListener('transitionend', () => {
 				try {
@@ -1625,7 +1632,34 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					toast.remove();
 				} catch (e) {}
 			}, 500);
-		}, duration);
+		};
+
+		if (action?.label && typeof action.onClick === 'function') {
+			const actionButton = document.createElement('button');
+			actionButton.type = 'button';
+			actionButton.className = 'mes-toast-action';
+			actionButton.textContent = action.label;
+			actionButton.addEventListener('click', async (event) => {
+				event.preventDefault();
+				event.stopPropagation();
+				actionButton.disabled = true;
+				try {
+					await action.onClick();
+				} finally {
+					dismissToast();
+				}
+			});
+			toast.appendChild(actionButton);
+		}
+		toastContainer.appendChild(toast);
+
+		void toast.offsetWidth;
+
+		requestAnimationFrame(() => {
+			toast.classList.add('show');
+		});
+
+		setTimeout(dismissToast, duration);
 	}
 
 	let selecting = false;
@@ -2760,6 +2794,37 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			};
 		}
 
+		async function undoBlockRule(rule) {
+			if (!rule) {
+				showToast(STRINGS.ruleUndoUnavailable, 'info', 1800);
+				return false;
+			}
+			try {
+				const currentRules = await loadBlockedSelectors();
+				if (!currentRules.includes(rule)) {
+					showToast(STRINGS.ruleUndoUnavailable, 'info', 1800);
+					return false;
+				}
+				await saveBlockedSelectors(currentRules.filter(savedRule => savedRule !== rule));
+				disableAllBlocking(false);
+				await applyBlocking(false);
+				if (activePanel === listPanel) await showList();
+				showToast(STRINGS.ruleUndoComplete, 'success', 1800);
+				return true;
+			} catch (error) {
+				console.error(SCRIPT_ID, 'Failed to undo rule:', error);
+				showToast(STRINGS.ruleUndoFailed, 'error', 2500);
+				return false;
+			}
+		}
+
+		function showRuleSavedToast(message, type, duration, rule) {
+			showToast(message, type, duration, rule ? {
+				label: STRINGS.undoAction,
+				onClick: () => undoBlockRule(rule)
+			} : null);
+		}
+
 		async function showList() {
 			console.log('[showList] Function called');
 			try {
@@ -3442,7 +3507,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 			const result = await addBlockRule(selector);
 			if (result.success) {
-				showToast(STRINGS.similarRuleReady(matchCount || 1), 'success', 1800);
+				showRuleSavedToast(STRINGS.similarRuleReady(matchCount || 1), 'success', 3200, result.rule);
 				resetPreview();
 				await applyBlocking(false);
 				setBlockMode(false);
@@ -3533,7 +3598,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				console.log('[addBtn] addBlockRule result:', result);
 
 				if (result.success) {
-					showToast(STRINGS.ruleSavedReloading, 'success', 2000);
+					showRuleSavedToast(STRINGS.ruleSavedReloading, 'success', 3200, result.rule);
 					resetPreview();
 					try {
 						await applyBlocking(false);
@@ -3689,7 +3754,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					if (result.success) {
 						disableAllBlocking(false);
 						await applyBlocking(false);
-						showToast(STRINGS.selectorCandidateSaved(candidate.matchCount || 1), 'success', 1800);
+						showRuleSavedToast(STRINGS.selectorCandidateSaved(candidate.matchCount || 1), 'success', 3200, result.rule);
 						renderInspector('element');
 					} else {
 						showToast(result.message, result.message === STRINGS.ruleExists ? 'info' : 'error');
