@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플
-// @version      1.3.0
+// @version      1.3.1
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      Apache-2.0
@@ -19,16 +19,16 @@
 
 (async function() {
 	'use strict';
-	const SCRIPT_ID = "[MES v1.3.0 M3]";
+	const SCRIPT_ID = "[MES v1.3.1 M3]";
 	const HIGHLIGHT_CLASS = 'mes-selected-element';
 	const LEGACY_HIGHLIGHT_CLASS = 'selected-element';
 	const ISOLATE_ACTIVE_CLASS = 'mes-isolate-active';
 	const ISOLATE_PATH_CLASS = 'mes-isolate-path';
 	const ISOLATE_TARGET_CLASS = 'mes-isolate-target';
 	const ISOLATE_HOST_CLASS = 'mes-isolate-host';
-	const TOGGLE_BASE_SIZE = 34;
+	const TOGGLE_BASE_SIZE = 28;
 	const TOGGLE_HITBOX_SIZE = 44;
-	const TOGGLE_MIN_VISUAL_SCALE = 0.85;
+	const TOGGLE_MIN_VISUAL_SCALE = 0.75;
 	const ALT_TOGGLE_LOGO_URL = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Cpath fill=%22%23a0c9ff%22 d=%22M32 5 52 13v15c0 13.9-8.1 25.9-20 31C20.1 53.9 12 41.9 12 28V13l20-8Z%22/%3E%3Cpath fill=%22%2300325a%22 d=%22M22 25h20v6H22v-6Zm0 10h14v6H22v-6Z%22/%3E%3C/svg%3E';
 
 	const STRINGS = {
@@ -69,13 +69,17 @@
 		selectorHintModeLabel: '강화 선택자 힌트',
 		privacyModeLabel: '민감 정보 보호',
 		autoCloseAfterCopyLabel: '복사 후 선택 모드 종료',
+		compactPickerModeLabel: '선택 후 패널 자동 축소',
 		launcherModeLabel: '열기 방식',
 		launcherButton: '버튼',
 		launcherGesture: '제스처',
+		minimizePanel: '패널 축소',
+		expandPanel: '패널 펼치기',
 		hideStrategyLabel: '숨김 방식',
 		hideStrategyDisplay: '제거',
-		hideStrategyVisibility: '자리 유지',
-		hideStrategyOpacity: '투명화',
+		hideStrategyVisibility: '공간',
+		hideStrategyOpacity: '투명',
+		hideStrategyStylesheet: 'CSS',
 		backupLabel: '규칙 백업 (JSON)',
 		restoreLabel: '규칙 복원 (JSON)',
 		togglePositionLabel: '토글 버튼 위치',
@@ -158,7 +162,7 @@
 		includeSiteName: true,
 		panelOpacity: 0.94,
 		toggleSizeScale: 1.0,
-		toggleOpacity: 1.0,
+		toggleOpacity: 0.62,
 		showAdguardLogo: false,
 		tempBlockingDisabled: false,
 		observeDomChanges: true,
@@ -166,9 +170,10 @@
 		selectorHintMode: true,
 		privacyMode: true,
 		autoCloseAfterCopy: false,
+		compactPickerMode: true,
 		hideToggleButton: false,
 		twoFingerGesture: false,
-		hideStrategy: 'display',
+		hideStrategy: 'stylesheet',
 		toggleBtnCorner: 'bottom-right'
 	};
 
@@ -248,10 +253,11 @@
 		settings.selectorHintMode = typeof settings.selectorHintMode === 'boolean' ? settings.selectorHintMode : DEFAULT_SETTINGS.selectorHintMode;
 		settings.privacyMode = typeof settings.privacyMode === 'boolean' ? settings.privacyMode : DEFAULT_SETTINGS.privacyMode;
 		settings.autoCloseAfterCopy = typeof settings.autoCloseAfterCopy === 'boolean' ? settings.autoCloseAfterCopy : DEFAULT_SETTINGS.autoCloseAfterCopy;
+		settings.compactPickerMode = typeof settings.compactPickerMode === 'boolean' ? settings.compactPickerMode : DEFAULT_SETTINGS.compactPickerMode;
 		settings.hideToggleButton = typeof settings.hideToggleButton === 'boolean' ? settings.hideToggleButton : DEFAULT_SETTINGS.hideToggleButton;
 		settings.twoFingerGesture = typeof settings.twoFingerGesture === 'boolean' ? settings.twoFingerGesture : DEFAULT_SETTINGS.twoFingerGesture;
 		settings.twoFingerGesture = settings.hideToggleButton ? true : false;
-		const validHideStrategies = ['display', 'visibility', 'opacity'];
+		const validHideStrategies = ['stylesheet', 'display', 'visibility', 'opacity'];
 		if (!validHideStrategies.includes(settings.hideStrategy)) {
 			settings.hideStrategy = DEFAULT_SETTINGS.hideStrategy;
 		}
@@ -291,6 +297,9 @@
 	const DYNAMIC_TOKEN_RE = /(?:^|[-_])(?:ember|react|vue|ng|svelte|random|hash|uuid|nonce|temp|tmp)(?:[-_]|$)|[a-f0-9]{7,}|[_-]?\d{3,}/i;
 	const BROAD_SELECTOR_HINT_RE = /(ad|ads|advert|banner|sponsor|promoted|promotion|popup|pop|modal|overlay|interstitial|notice|recommend|related|widget|slot|wing)/i;
 	const SHADOW_SELECTOR_RE = /^:mes-shadow\("([^"]+)"\)\s*>>>\s*(.+)$/;
+	const STYLE_BLOCK_ID = 'mes-rule-style';
+	const STYLE_BLOCK_OWNER_ATTR = 'data-mes-style-owner';
+	const STYLE_BLOCK_OWNER_VALUE = 'blocking';
 
 	function escapeAttributeValue(value) {
 		return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim();
@@ -418,8 +427,7 @@
 		return `:mes-shadow("${encodeShadowSelectorPath(hostSelectors)}") >>> ${localSelector}`;
 	}
 
-	function queryShadowScopedSelector(selector) {
-		const parsed = parseShadowScopedSelector(selector);
+	function getShadowRootsForHostChain(parsed) {
 		if (!parsed) return [];
 		let roots = [document];
 		parsed.hostSelectors.forEach(hostSelector => {
@@ -435,6 +443,13 @@
 			});
 			roots = nextRoots;
 		});
+		return roots.filter(root => isShadowRoot(root));
+	}
+
+	function queryShadowScopedSelector(selector) {
+		const parsed = parseShadowScopedSelector(selector);
+		if (!parsed) return [];
+		const roots = getShadowRootsForHostChain(parsed);
 		const results = [];
 		const seen = new Set();
 		roots.forEach(root => {
@@ -462,7 +477,7 @@
 			try {
 				root.querySelectorAll(selector).forEach(el => {
 					if (results.length >= 600) return;
-					if (!seen.has(el) && !el.closest?.('.mobile-block-ui')) {
+					if (!seen.has(el) && isSafeHideCandidate(el)) {
 						seen.add(el);
 						results.push(el);
 					}
@@ -888,7 +903,7 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
     background-color: rgba(248, 248, 250, var(--panel-opacity)) !important; backdrop-filter: saturate(1.45) blur(20px); -webkit-backdrop-filter: saturate(1.45) blur(20px);
     color: var(--md-sys-color-on-surface); border-radius: 18px !important;
     box-shadow: 0 20px 55px rgba(0, 0, 0, 0.20), 0 2px 8px rgba(0, 0, 0, 0.08) !important;
-    border: 1px solid rgba(255, 255, 255, 0.70); padding: 11px 12px; width: calc(100% - 48px); max-width: 326px;
+    border: 1px solid rgba(255, 255, 255, 0.70); padding: 10px 11px; width: calc(100% - 56px); max-width: 310px;
     display: none;
     opacity: 0;
     backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden;
@@ -898,8 +913,8 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 }
 
 #mobile-block-panel { bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); left: 50%; transform: translateX(-50%) translateY(100px) scale(0.95); z-index: 2147483645 !important; }
-#mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.94); z-index: 2147483647 !important; max-width: 326px; max-height: 78vh; overflow-y: auto; }
-#mobile-settings-panel { flex-direction: column; overflow: hidden; max-height: min(74vh, 620px); }
+#mobile-settings-panel, #mobile-blocklist-panel, #mobile-inspector-panel { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.94); z-index: 2147483647 !important; max-width: 310px; max-height: 76vh; overflow-y: auto; }
+#mobile-settings-panel { flex-direction: column; overflow: hidden; max-height: min(70vh, 560px); }
 
 #mobile-block-panel.visible {
     opacity: 1;
@@ -948,22 +963,22 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 }
 
 #mobile-block-toggleBtn {
-    z-index: 2147483646 !important; background-color: transparent !important; color: rgba(60, 60, 67, 0.54) !important;
+    z-index: 2147483646 !important; background-color: transparent !important; color: rgba(60, 60, 67, 0.34) !important;
     opacity: var(--toggle-opacity) !important; width: var(--toggle-hitbox-size) !important; height: var(--toggle-hitbox-size) !important; border-radius: 999px !important; border: none !important; cursor: pointer !important;
     box-shadow: none !important;
     transition: background-color 0.2s ease, transform 0.16s ease, box-shadow 0.2s ease, opacity 0.2s ease, border 0.2s ease, top 0.2s ease, left 0.2s ease, bottom 0.2s ease, right 0.2s ease;
     display: flex !important; align-items: center !important; justify-content: center !important; overflow: hidden !important; backface-visibility: hidden; -webkit-backface-visibility: hidden; position: fixed !important; -webkit-tap-highlight-color: transparent !important;
 }
-#mobile-block-toggleBtn::before { content: ''; position: absolute; width: var(--toggle-size); height: var(--toggle-size); border-radius: 999px; background-color: rgba(255, 255, 255, 0.70); border: 0.5px solid rgba(60, 60, 67, 0.16); box-shadow: 0 8px 18px rgba(0,0,0,0.10), 0 1px 3px rgba(0,0,0,0.08); transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, width 0.2s ease, height 0.2s ease; }
+#mobile-block-toggleBtn::before { content: ''; position: absolute; width: var(--toggle-size); height: var(--toggle-size); border-radius: 999px; background-color: rgba(255, 255, 255, 0.54); border: 0.5px solid rgba(60, 60, 67, 0.12); box-shadow: 0 3px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.05); transition: background-color 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, width 0.2s ease, height 0.2s ease; }
 #mobile-block-toggleBtn:active { transform: scale(0.94); box-shadow: none !important; }
 #mobile-block-toggleBtn.selecting {
     background-color: transparent !important;
-    color: rgba(60, 60, 67, 0.62) !important;
+    color: rgba(60, 60, 67, 0.48) !important;
 }
 #mobile-block-toggleBtn.selecting::before {
-    background-color: rgba(255, 255, 255, 0.78);
-    border-color: rgba(60, 60, 67, 0.22);
-    box-shadow: 0 7px 16px rgba(0,0,0,0.12), 0 0 0 2px rgba(60, 60, 67, 0.08);
+    background-color: rgba(255, 255, 255, 0.70);
+    border-color: rgba(60, 60, 67, 0.18);
+    box-shadow: 0 5px 12px rgba(0,0,0,0.09), 0 0 0 2px rgba(60, 60, 67, 0.06);
 }
 #mobile-block-toggleBtn.hidden-toggle { display: none !important; }
 #mobile-block-toggleBtn .toggle-icon { position: relative; z-index: 1; width: calc(var(--toggle-size) * 0.46); height: calc(var(--toggle-size) * 0.46); display: block; margin: auto; background-color: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
@@ -988,21 +1003,37 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 .mb-btn.outline { background-color: transparent; color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline); box-shadow: none; }
 .mb-btn.outline:hover { background-color: rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.08); }
 .mb-btn.outline:active { background-color: rgba(var(--md-sys-color-primary-rgb, 160, 201, 255), 0.12); }
+.mes-icon { display: inline-block; width: 14px; height: 14px; flex: 0 0 auto; background-color: currentColor; opacity: 0.78; mask-size: contain; mask-position: center; mask-repeat: no-repeat; -webkit-mask-size: contain; -webkit-mask-position: center; -webkit-mask-repeat: no-repeat; }
+.btn-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.icon-minimize { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 11h14v2H5v-2Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 11h14v2H5v-2Z"/></svg>'); }
+.icon-expand { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 9V5h4v2H8v2H6Zm8-4h4v4h-2V7h-2V5ZM8 15v2h2v2H6v-4h2Zm8 2v-2h2v4h-4v-2h2Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M6 9V5h4v2H8v2H6Zm8-4h4v4h-2V7h-2V5ZM8 15v2h2v2H6v-4h2Zm8 2v-2h2v4h-4v-2h2Z"/></svg>'); }
+.icon-preview { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 5c5 0 8 4.5 9 7-1 2.5-4 7-9 7s-8-4.5-9-7c1-2.5 4-7 9-7Zm0 3.5A3.5 3.5 0 1 0 12 15a3.5 3.5 0 0 0 0-7Zm0 2A1.5 1.5 0 1 1 12 13a1.5 1.5 0 0 1 0-3Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 5c5 0 8 4.5 9 7-1 2.5-4 7-9 7s-8-4.5-9-7c1-2.5 4-7 9-7Zm0 3.5A3.5 3.5 0 1 0 12 15a3.5 3.5 0 0 0 0-7Zm0 2A1.5 1.5 0 1 1 12 13a1.5 1.5 0 0 1 0-3Z"/></svg>'); }
+.icon-save { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m9.2 16.2-3.4-3.4 1.4-1.4 2 2 7.6-7.6 1.4 1.4-9 9Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m9.2 16.2-3.4-3.4 1.4-1.4 2 2 7.6-7.6 1.4 1.4-9 9Z"/></svg>'); }
+.icon-more { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm7 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm7 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm7 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4Zm7 0a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/></svg>'); }
+.icon-close { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m7 5.6 5 5 5-5L18.4 7l-5 5 5 5-1.4 1.4-5-5-5 5L5.6 17l5-5-5-5L7 5.6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m7 5.6 5 5 5-5L18.4 7l-5 5 5 5-1.4 1.4-5-5-5 5L5.6 17l5-5-5-5L7 5.6Z"/></svg>'); }
+.icon-parent { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12 7 6 6-1.4 1.4L12 9.8l-4.6 4.6L6 13l6-6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12 7 6 6-1.4 1.4L12 9.8l-4.6 4.6L6 13l6-6Z"/></svg>'); }
+.icon-child { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12 17-6-6 1.4-1.4 4.6 4.6 4.6-4.6L18 11l-6 6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m12 17-6-6 1.4-1.4 4.6 4.6 4.6-4.6L18 11l-6 6Z"/></svg>'); }
 
 .button-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(82px, 1fr)); gap: 8px; margin-top: 14px; }
-.primary-action-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.picker-topbar { display: grid; grid-template-columns: minmax(0, 1fr) 32px; gap: 8px; align-items: center; margin-bottom: 8px; }
+#blocker-compact-summary { min-width: 0; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#mobile-block-panel:not(.compact-picker) #blocker-compact-summary { opacity: 0; }
+.picker-compact-btn { width: 32px; min-width: 32px; height: 30px; min-height: 30px; padding: 0 !important; border-radius: 999px !important; background-color: rgba(118,118,128,0.12); color: var(--md-sys-color-on-surface-variant); }
+.picker-compact-btn .mes-icon { width: 15px; height: 15px; opacity: 0.72; }
+.primary-action-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
+.primary-action-grid .mb-btn { gap: 4px; min-height: 31px; padding: 6px 8px; font-size: var(--md-sys-typescale-label-small-font-size); }
 .secondary-action-grid { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 0.5px solid rgba(60,60,67,0.12); }
 .secondary-action-grid.visible { display: grid; }
 .secondary-action-grid .mb-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-medium-font-size); }
-#blocker-info-wrapper { margin-bottom: 10px; padding: 9px 10px; background-color: rgba(118,118,128,0.10); border-radius: 12px; border: 0.5px solid rgba(60,60,67,0.08); }
+#blocker-info-wrapper { margin-bottom: 8px; padding: 8px 9px; background-color: rgba(118,118,128,0.10); border-radius: 12px; border: 0.5px solid rgba(60,60,67,0.08); }
 #blocker-info-label { display: block; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; font-weight: 600; }
 #blocker-info { display: block; color: var(--md-sys-color-on-surface); font-size: var(--md-sys-typescale-label-medium-font-size); line-height: 1.4; word-break: break-all; min-height: 1.4em; font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; max-height: 4.2em; overflow-y: auto; }
 #blocker-info:empty::after { content: '없음'; color: var(--md-sys-color-on-surface-variant); font-style: italic; }
 #blocker-nav-label { min-height: 1.25em; margin-top: -4px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: center; }
-.element-nav-row { display: grid; grid-template-columns: 52px 1fr 52px; gap: 6px; align-items: center; margin-top: 6px; }
+.element-nav-row { display: grid; grid-template-columns: 44px 1fr 44px; gap: 6px; align-items: center; margin-top: 6px; }
 .element-nav-row .mb-slider { margin: 0; background: linear-gradient(to right, rgba(0,122,255,0.32) 0%, rgba(0,122,255,0.32) var(--nav-progress, 50%), rgba(120,120,128,0.20) var(--nav-progress, 50%), rgba(120,120,128,0.20) 100%); }
 .element-nav-row .mb-slider:disabled { opacity: 0.45; }
-.nav-step-btn { min-width: 0; min-height: 30px; padding: 5px 7px; font-size: var(--md-sys-typescale-label-small-font-size); }
+.nav-step-btn { min-width: 0; min-height: 30px; padding: 5px 7px; font-size: var(--md-sys-typescale-label-small-font-size); gap: 2px; }
 #blocker-selector-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); }
 .selector-chip { display: inline-flex; align-items: center; min-height: 20px; padding: 1px 7px; border-radius: 999px; background-color: rgba(118,118,128,0.10); border: 0.5px solid rgba(60,60,67,0.08); }
 .selector-chip.unique { color: var(--md-sys-color-success); border-color: rgba(144, 238, 144, 0.35); }
@@ -1010,19 +1041,39 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 .selector-chip.error { color: var(--md-sys-color-error); border-color: rgba(255, 180, 171, 0.35); }
 label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-label-small-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 4px; margin-top: 8px; font-weight: 600; }
 
+#mobile-block-panel.compact-picker { width: min(304px, calc(100% - 56px)); max-width: 304px; padding: 7px 8px; border-radius: 22px !important; }
+#mobile-block-panel.compact-picker #blocker-info-wrapper,
+#mobile-block-panel.compact-picker label[for="blocker-slider"],
+#mobile-block-panel.compact-picker #blocker-nav-label,
+#mobile-block-panel.compact-picker .element-nav-row,
+#mobile-block-panel.compact-picker #blocker-secondary-actions { display: none !important; }
+#mobile-block-panel.compact-picker .picker-topbar { margin-bottom: 5px; grid-template-columns: minmax(0, 1fr) 30px; }
+#mobile-block-panel.compact-picker #blocker-compact-summary { opacity: 1; padding-left: 4px; }
+#mobile-block-panel.compact-picker .picker-compact-btn { width: 30px; min-width: 30px; height: 28px; min-height: 28px; background-color: rgba(118,118,128,0.10); }
+#mobile-block-panel.compact-picker .nav-step-btn,
+#mobile-block-panel.compact-picker .primary-action-grid .mb-btn { width: 30px; min-width: 30px; height: 28px; min-height: 28px; padding: 0 !important; border-radius: 999px !important; }
+#mobile-block-panel.compact-picker .nav-step-btn .btn-label,
+#mobile-block-panel.compact-picker .primary-action-grid .btn-label { display: none; }
+#mobile-block-panel.compact-picker .nav-step-btn .mes-icon,
+#mobile-block-panel.compact-picker .primary-action-grid .mes-icon { display: inline-block; width: 14px; height: 14px; opacity: 0.78; }
+#mobile-block-panel.compact-picker .primary-action-grid { margin-top: 0; display: flex; justify-content: center; gap: 8px; }
+#mobile-block-panel.compact-picker #blocker-more { display: none !important; }
+#mobile-block-panel.compact-picker .mb-slider::-webkit-slider-thumb { width: 16px; height: 16px; }
+#mobile-block-panel.compact-picker .mb-slider::-moz-range-thumb { width: 16px; height: 16px; }
+
 .settings-layout { display: block; }
 .settings-scroll { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
-.settings-item { margin: 0; padding: 8px 0; display: flex; flex-direction: column; gap: 6px; border-bottom: 0.5px solid rgba(60,60,67,0.10); }
-.settings-section-title { margin: 16px 0 4px; padding-top: 2px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); font-weight: 700; letter-spacing: 0; }
+.settings-item { margin: 0; padding: 6px 0; display: flex; flex-direction: column; gap: 5px; border-bottom: 0.5px solid rgba(60,60,67,0.10); }
+.settings-section-title { margin: 13px 0 3px; padding-top: 1px; color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); font-weight: 700; letter-spacing: 0; }
 .settings-section-title:first-child { margin-top: 0; }
 .settings-credit { margin-top: 8px; color: var(--md-sys-color-outline); font-size: 9px; font-weight: 500; text-align: center; letter-spacing: 0; opacity: 0.72; }
-.settings-item label { display: flex; justify-content: space-between; align-items: center; font-size: var(--md-sys-typescale-label-large-font-size); color: var(--md-sys-color-on-surface); min-height: 32px; }
+.settings-item label { display: flex; justify-content: space-between; align-items: center; font-size: var(--md-sys-typescale-label-large-font-size); color: var(--md-sys-color-on-surface); min-height: 28px; }
 .settings-item label .settings-label-text { flex-grow: 1; margin-right: 10px; }
 .settings-value { color: var(--md-sys-color-on-surface); font-weight: 500; font-size: var(--md-sys-typescale-label-medium-font-size); padding-left: 10px; }
-.mes-switch { width: 46px; min-width: 46px; height: 28px; min-height: 28px; padding: 2px !important; border-radius: 999px !important; background-color: rgba(118,118,128,0.18); border: 0.5px solid rgba(60,60,67,0.10); box-shadow: inset 0 0 0 0.5px rgba(60,60,67,0.06); flex-shrink: 0; justify-content: flex-start; font-size: 0; }
-.mes-switch .switch-knob { width: 24px; height: 24px; border-radius: 50%; background: #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.22); transform: translateX(0); transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.mes-switch { width: 42px; min-width: 42px; height: 26px; min-height: 26px; padding: 2px !important; border-radius: 999px !important; background-color: rgba(118,118,128,0.18); border: 0.5px solid rgba(60,60,67,0.10); box-shadow: inset 0 0 0 0.5px rgba(60,60,67,0.06); flex-shrink: 0; justify-content: flex-start; font-size: 0; }
+.mes-switch .switch-knob { width: 22px; height: 22px; border-radius: 50%; background: #ffffff; box-shadow: 0 1px 4px rgba(0,0,0,0.22); transform: translateX(0); transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
 .mes-switch.active { background-color: var(--md-sys-color-primary); border-color: transparent; }
-.mes-switch.active .switch-knob { transform: translateX(18px); }
+.mes-switch.active .switch-knob { transform: translateX(16px); }
 .mes-switch.error.active { background-color: var(--md-sys-color-error); }
 #settings-close, #settings-backup, #settings-restore { width: 100%; margin-top: 8px; }
 #settings-restore-input { display: none; }
@@ -1034,7 +1085,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .corner-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; }
 .corner-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
 .corner-btn:not(.active) { background-color: transparent; color: var(--md-sys-color-on-surface-variant); }
-.hide-strategy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-top: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
+.hide-strategy-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin-top: 2px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
 .hide-strategy-btn { padding: 6px 8px; min-width: 0; min-height: 30px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 10px !important; }
 .hide-strategy-btn.active { background-color: #ffffff; color: var(--md-sys-color-primary); box-shadow: 0 1px 4px rgba(0,0,0,0.10); }
 .hide-strategy-btn:not(.active) { background-color: transparent; color: var(--md-sys-color-on-surface-variant); }
@@ -1113,6 +1164,12 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		panel.id = 'mobile-block-panel';
 		panel.className = 'mobile-block-ui';
 		panel.innerHTML = `
+            <div class="picker-topbar">
+                <div id="blocker-compact-summary"></div>
+                <button id="blocker-compact-toggle" class="mb-btn picker-compact-btn" aria-label="${STRINGS.minimizePanel}" title="${STRINGS.minimizePanel}">
+                    <span class="mes-icon icon-minimize" aria-hidden="true"></span>
+                </button>
+            </div>
             <div id="blocker-info-wrapper">
                 <span id="blocker-info-label">${STRINGS.selectedElementLabel}</span>
                 <div id="blocker-info"></div>
@@ -1120,16 +1177,16 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             </div>
             <label for="blocker-slider" style="display: block; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); margin-bottom: 5px;">${STRINGS.parentLevelLabel}</label>
             <div class="element-nav-row">
-                <button id="blocker-parent" class="mb-btn surface nav-step-btn">${STRINGS.parent}</button>
+                <button id="blocker-parent" class="mb-btn surface nav-step-btn" aria-label="${STRINGS.parent}" title="${STRINGS.parent}"><span class="btn-label">${STRINGS.parent}</span><span class="mes-icon icon-parent" aria-hidden="true"></span></button>
                 <input type="range" id="blocker-slider" class="mb-slider" min="0" max="10" value="0" aria-label="Element hierarchy">
-                <button id="blocker-child" class="mb-btn surface nav-step-btn">${STRINGS.child}</button>
+                <button id="blocker-child" class="mb-btn surface nav-step-btn" aria-label="${STRINGS.child}" title="${STRINGS.child}"><span class="btn-label">${STRINGS.child}</span><span class="mes-icon icon-child" aria-hidden="true"></span></button>
             </div>
             <div id="blocker-nav-label"></div>
             <div class="primary-action-grid">
-                <button id="blocker-preview" class="mb-btn secondary">${STRINGS.preview}</button>
-                <button id="blocker-add-block" class="mb-btn primary">${STRINGS.saveRule}</button>
-                <button id="blocker-more" class="mb-btn tertiary">${STRINGS.more}</button>
-                <button id="blocker-cancel" class="mb-btn surface">${STRINGS.cancel}</button>
+                <button id="blocker-preview" class="mb-btn secondary" aria-label="${STRINGS.preview}" title="${STRINGS.preview}"><span class="mes-icon icon-preview" aria-hidden="true"></span><span class="btn-label">${STRINGS.preview}</span></button>
+                <button id="blocker-add-block" class="mb-btn primary" aria-label="${STRINGS.saveRule}" title="${STRINGS.saveRule}"><span class="mes-icon icon-save" aria-hidden="true"></span><span class="btn-label">${STRINGS.saveRule}</span></button>
+                <button id="blocker-more" class="mb-btn tertiary" aria-label="${STRINGS.more}" title="${STRINGS.more}"><span class="mes-icon icon-more" aria-hidden="true"></span><span class="btn-label">${STRINGS.more}</span></button>
+                <button id="blocker-cancel" class="mb-btn surface" aria-label="${STRINGS.cancel}" title="${STRINGS.cancel}"><span class="mes-icon icon-close" aria-hidden="true"></span><span class="btn-label">${STRINGS.cancel}</span></button>
             </div>
             <div id="blocker-secondary-actions" class="secondary-action-grid">
                 <button id="blocker-copy-css" class="mb-btn secondary">${STRINGS.copyCss}</button>
@@ -1227,6 +1284,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 </label>
             </div>
             <div class="settings-item">
+                <label><span class="settings-label-text">${STRINGS.compactPickerModeLabel}</span>
+                    <button id="settings-compact-picker" class="mb-btn mes-switch ${settings.compactPickerMode ? 'active' : ''}" role="switch" aria-checked="${settings.compactPickerMode}" aria-label="${STRINGS.compactPickerModeLabel}"><span class="switch-knob"></span></button>
+                </label>
+            </div>
+            <div class="settings-item">
                  <label><span class="settings-label-text">${STRINGS.launcherModeLabel}</span></label>
                  <div class="launcher-mode-grid" role="radiogroup" aria-label="${STRINGS.launcherModeLabel}">
                      <button data-launcher-mode="button" class="mb-btn launcher-mode-btn" role="radio">${STRINGS.launcherButton}</button>
@@ -1237,6 +1299,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             <div class="settings-item">
                  <label><span class="settings-label-text">${STRINGS.hideStrategyLabel}</span></label>
                  <div class="hide-strategy-grid">
+                     <button data-hide-strategy="stylesheet" class="mb-btn hide-strategy-btn">${STRINGS.hideStrategyStylesheet}</button>
                      <button data-hide-strategy="display" class="mb-btn hide-strategy-btn">${STRINGS.hideStrategyDisplay}</button>
                      <button data-hide-strategy="visibility" class="mb-btn hide-strategy-btn">${STRINGS.hideStrategyVisibility}</button>
                      <button data-hide-strategy="opacity" class="mb-btn hide-strategy-btn">${STRINGS.hideStrategyOpacity}</button>
@@ -1376,6 +1439,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 	const originalStyleMap = new Map();
 	const hiddenElements = new Set();
+	const styleRuleNodes = new Set();
+	const adoptedStyleHandles = [];
 	let applyingBlocking = false;
 	let pendingBlockingApply = false;
 
@@ -1392,12 +1457,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	function applyHiddenStyle(el, strategy = settings.hideStrategy) {
 		if (!el) return;
 		rememberOriginalStyles(el);
+		const effectiveStrategy = strategy === 'stylesheet' ? 'display' : strategy;
 
-		if (strategy === 'visibility') {
+		if (effectiveStrategy === 'visibility') {
 			el.style.removeProperty('display');
 			el.style.setProperty('visibility', 'hidden', 'important');
 			el.style.setProperty('pointer-events', 'none', 'important');
-		} else if (strategy === 'opacity') {
+		} else if (effectiveStrategy === 'opacity') {
 			el.style.removeProperty('display');
 			el.style.setProperty('opacity', '0', 'important');
 			el.style.setProperty('pointer-events', 'none', 'important');
@@ -1435,6 +1501,197 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 	}
 
+	function getStyleHideDeclaration(strategy = settings.hideStrategy) {
+		if (strategy === 'visibility') return 'visibility: hidden !important; pointer-events: none !important;';
+		if (strategy === 'opacity') return 'opacity: 0 !important; pointer-events: none !important;';
+		return 'display: none !important;';
+	}
+
+	function escapeCssRuleSelector(selector) {
+		return String(selector || '').trim();
+	}
+
+	function isMesOwnedStyleNode(node) {
+		return node?.nodeType === 1 &&
+			node.tagName === 'STYLE' &&
+			node.id === STYLE_BLOCK_ID &&
+			node.getAttribute(STYLE_BLOCK_OWNER_ATTR) === STYLE_BLOCK_OWNER_VALUE;
+	}
+
+	function isMesUiElement(el) {
+		return !!(el?.nodeType === 1 && (el.classList?.contains('mobile-block-ui') || el.closest?.('.mobile-block-ui')));
+	}
+
+	function isSafeHideCandidate(el) {
+		if (!el || el.nodeType !== 1) return false;
+		if (el === document.documentElement || el === document.body) return false;
+		if (isMesUiElement(el)) return false;
+		return ![panel, settingsPanel, listPanel, inspectorPanel, toggleBtn].some(ui => ui && ui !== el && el.contains?.(ui));
+	}
+
+	function selectorHasSensitiveLiteral(selector) {
+		if (!settings.privacyMode) return false;
+		const text = String(selector || '');
+		return /\[(?:[^\]=~|^$*]+\|)?(?:token|secret|session|auth|cookie|password|passwd|credential|api[-_]?key)[^\]]*=/i.test(text) ||
+			/[A-Za-z0-9_-]{32,}/.test(text) ||
+			/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/i.test(text);
+	}
+
+	function scopeCssRuleSelector(selector) {
+		const trimmed = escapeCssRuleSelector(selector);
+		if (!trimmed || selectorHasSensitiveLiteral(trimmed)) return '';
+		return `:where(${trimmed}):not(html):not(body):not(.mobile-block-ui):not(.mobile-block-ui *)`;
+	}
+
+	function getOwnedStyleNodes(root = document) {
+		try {
+			return Array.from(root.querySelectorAll?.(`style#${STYLE_BLOCK_ID}[${STYLE_BLOCK_OWNER_ATTR}="${STYLE_BLOCK_OWNER_VALUE}"]`) || []);
+		} catch (e) {
+			return [];
+		}
+	}
+
+	function ensureBlockStyleNode(root = document) {
+		if (!root) return null;
+		let node = getOwnedStyleNodes(root)[0] || null;
+		if (!node) {
+			node = document.createElement('style');
+			node.id = STYLE_BLOCK_ID;
+			node.setAttribute(STYLE_BLOCK_OWNER_ATTR, STYLE_BLOCK_OWNER_VALUE);
+			const target = isShadowRoot(root) ? root : document.head || document.documentElement;
+			target.appendChild(node);
+		}
+		styleRuleNodes.add(node);
+		return node;
+	}
+
+	function clearStyleRuleNodes() {
+		adoptedStyleHandles.forEach(({ root, sheet }) => {
+			try {
+				root.adoptedStyleSheets = Array.from(root.adoptedStyleSheets || []).filter(existingSheet => existingSheet !== sheet);
+			} catch (e) {}
+		});
+		adoptedStyleHandles.length = 0;
+		styleRuleNodes.forEach(node => {
+			try {
+				node.textContent = '';
+				node.remove();
+			} catch (e) {}
+		});
+		styleRuleNodes.clear();
+		getOwnedStyleNodes(document).forEach(node => node.remove());
+		collectOpenShadowRoots(document).forEach(root => getOwnedStyleNodes(root).forEach(node => node.remove()));
+	}
+
+	function isMesInternalNode(node) {
+		if (!node || node.nodeType !== 1) return false;
+		return isMesOwnedStyleNode(node) ||
+			node.id === 'mes-isolation-style' ||
+			node.id === 'mes-shadow-highlight-style' ||
+			isMesUiElement(node);
+	}
+
+	function setBlockStyleText(root, cssText) {
+		if (!root || !cssText) return false;
+		if (typeof CSSStyleSheet === 'function') {
+			try {
+				const currentSheets = Array.from(root.adoptedStyleSheets || []);
+				const sheet = new CSSStyleSheet();
+				sheet.replaceSync(cssText);
+				root.adoptedStyleSheets = [...currentSheets, sheet];
+				adoptedStyleHandles.push({ root, sheet });
+				return true;
+			} catch (e) {}
+		}
+		const node = ensureBlockStyleNode(root);
+		if (!node) return false;
+		node.textContent = cssText;
+		return true;
+	}
+
+	function restoreTrackedHiddenElements() {
+		pruneHiddenElementRefs();
+		Array.from(hiddenElements).forEach(el => restoreHiddenElement(el));
+	}
+
+	function buildStylesheetBuckets(rules, currentHostname = location.hostname) {
+		const globalSelectors = [];
+		const shadowBuckets = new Map();
+		const fallbackSelectors = [];
+		rules.forEach(rule => {
+			if (!ruleAppliesToHost(rule, currentHostname)) return;
+			const parts = getRuleParts(rule);
+			if (!parts?.selector) return;
+			const shadowScoped = parseShadowScopedSelector(parts.selector);
+			if (shadowScoped) {
+				const roots = new Set(getShadowRootsForHostChain(shadowScoped));
+				roots.forEach(root => {
+					const scopedSelector = scopeCssRuleSelector(shadowScoped.localSelector);
+					try {
+						if (!scopedSelector) throw new Error('Fallback selector required');
+						root.querySelector(scopedSelector);
+					} catch (e) {
+						fallbackSelectors.push(parts.selector);
+						return;
+					}
+					if (!shadowBuckets.has(root)) shadowBuckets.set(root, new Set());
+					shadowBuckets.get(root).add(scopedSelector);
+				});
+				return;
+			}
+			const selector = scopeCssRuleSelector(parts.selector);
+			try {
+				if (!selector) throw new Error('Fallback selector required');
+				document.querySelector(selector);
+				globalSelectors.push(selector);
+			} catch (e) {
+				fallbackSelectors.push(parts.selector);
+			}
+		});
+		return {
+			globalSelectors: Array.from(new Set(globalSelectors)),
+			shadowBuckets,
+			fallbackSelectors: Array.from(new Set(fallbackSelectors))
+		};
+	}
+
+	function applyStylesheetBlocking(rules, currentHostname = location.hostname) {
+		clearStyleRuleNodes();
+		restoreTrackedHiddenElements();
+		const declaration = getStyleHideDeclaration(settings.hideStrategy);
+		const buckets = buildStylesheetBuckets(rules, currentHostname);
+		let appliedCount = 0;
+		if (buckets.globalSelectors.length) {
+			if (setBlockStyleText(document, `${buckets.globalSelectors.join(',\n')} { ${declaration} }`)) {
+				appliedCount += buckets.globalSelectors.length;
+			}
+		}
+		buckets.shadowBuckets.forEach((selectorSet, root) => {
+			const selectors = Array.from(selectorSet).filter(Boolean);
+			if (!selectors.length) return;
+			if (setBlockStyleText(root, `${selectors.join(',\n')} { ${declaration} }`)) {
+				appliedCount += selectors.length;
+			}
+		});
+		buckets.fallbackSelectors.forEach(selector => {
+			try {
+				const elements = querySelectorAllEverywhere(selector);
+				let hidAny = false;
+				elements.forEach(el => {
+					if (!isSafeHideCandidate(el)) return;
+					const isHiddenByScript = hiddenElements.has(el);
+					const isNaturallyHidden = window.getComputedStyle(el).display === 'none';
+					if (!isHiddenByScript && !isNaturallyHidden) {
+						applyHiddenStyle(el, 'display');
+						hidAny = true;
+					}
+				});
+				if (hidAny) appliedCount++;
+			} catch (e) {}
+		});
+		return appliedCount;
+	}
+
 	async function applyBlocking(showToastNotification = false) {
 		if (settings.tempBlockingDisabled) {
 			console.log(SCRIPT_ID, "Blocking temporarily disabled. Skipping application.");
@@ -1454,9 +1711,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				await loadBlockedSelectors();
 			}
 
+			const currentHostname = location.hostname;
+			if (settings.hideStrategy === 'stylesheet') {
+				const appliedCount = applyStylesheetBlocking(blockedSelectorsCache, currentHostname);
+				console.log(SCRIPT_ID, `Applied ${appliedCount} stylesheet rules.`);
+				if (showToastNotification && appliedCount > 0 && !settings.tempBlockingDisabled) {
+					showToast(STRINGS.blockingApplied(appliedCount), 'success', 2000);
+				}
+				return appliedCount;
+			}
+
+			clearStyleRuleNodes();
 			let count = 0;
 			let appliedCount = 0;
-			const currentHostname = location.hostname;
 			const queryRoots = getQueryRoots(document);
 
 			blockedSelectorsCache.forEach(rule => {
@@ -1512,6 +1779,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 	function disableAllBlocking(showToastNotification = true) {
 		console.log(SCRIPT_ID, "Disabling all blocking rules temporarily...");
+		clearStyleRuleNodes();
 		pruneHiddenElementRefs();
 		let restoredCount = 0;
 		const elementsToRestore = new Set([
@@ -1732,6 +2000,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		const listBtn = panel.querySelector('#blocker-list');
 		const settingsBtn = panel.querySelector('#blocker-settings');
 		const cancelBtn = panel.querySelector('#blocker-cancel');
+		const compactToggleBtn = panel.querySelector('#blocker-compact-toggle');
+		const compactSummary = panel.querySelector('#blocker-compact-summary');
 
 		const listSummary = listPanel.querySelector('#blocklist-summary');
 		const listSearch = listPanel.querySelector('#blocklist-search');
@@ -1755,6 +2025,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		const selectorHintsBtn = settingsPanel.querySelector('#settings-selector-hints');
 		const privacyModeBtn = settingsPanel.querySelector('#settings-privacy-mode');
 		const autoCloseBtn = settingsPanel.querySelector('#settings-auto-close');
+		const compactPickerBtn = settingsPanel.querySelector('#settings-compact-picker');
 		const launcherModeButtons = settingsPanel.querySelectorAll('.launcher-mode-btn');
 		const panelOpacitySlider = settingsPanel.querySelector('#settings-panel-opacity');
 		const panelOpacityValue = settingsPanel.querySelector('#opacity-value');
@@ -1770,6 +2041,28 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		let isPreviewHidden = false;
 		let previewedElement = null;
+		let pickerCompact = false;
+
+		function setPickerCompact(compact) {
+			pickerCompact = !!compact;
+			panel.classList.toggle('compact-picker', pickerCompact);
+			if (compactToggleBtn) {
+				compactToggleBtn.setAttribute('aria-label', pickerCompact ? STRINGS.expandPanel : STRINGS.minimizePanel);
+				compactToggleBtn.title = pickerCompact ? STRINGS.expandPanel : STRINGS.minimizePanel;
+				compactToggleBtn.innerHTML = `<span class="mes-icon ${pickerCompact ? 'icon-expand' : 'icon-minimize'}" aria-hidden="true"></span>`;
+			}
+		}
+
+		function updateCompactSummary(labelText = '') {
+			if (!compactSummary) return;
+			if (!selectedEl) {
+				compactSummary.textContent = STRINGS.noElementSelected;
+				return;
+			}
+			const tag = selectedEl.tagName.toLowerCase();
+			const identity = selectedEl.id ? `#${selectedEl.id}` : getStableClasses(selectedEl).slice(0, 2).map(className => `.${className}`).join('');
+			compactSummary.textContent = labelText || `${tag}${identity}`;
+		}
 
 		function removeSelectionHighlight() {
 			clearIsolation();
@@ -1795,7 +2088,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				}
 			}
 			if (previewBtn) {
-				previewBtn.textContent = STRINGS.preview;
+				const label = previewBtn.querySelector('.btn-label');
+				if (label) label.textContent = STRINGS.preview;
+				else previewBtn.textContent = STRINGS.preview;
+				previewBtn.setAttribute('aria-label', STRINGS.preview);
+				previewBtn.title = STRINGS.preview;
 				previewBtn.classList.remove('tertiary');
 				previewBtn.classList.add('secondary');
 			}
@@ -1831,6 +2128,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				}
 			}
 			infoLabel.style.display = 'block';
+			updateCompactSummary();
 		}
 
 		function buildNavigationItems(originEl) {
@@ -1870,6 +2168,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				if (parentBtn) parentBtn.disabled = true;
 				if (childBtn) childBtn.disabled = true;
 				if (slider) slider.disabled = true;
+				updateCompactSummary();
 				return;
 			}
 			const items = buildNavigationItems(initialTouchedElement);
@@ -1887,6 +2186,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (navLabel) {
 				navLabel.textContent = items.length ? `${labelText} · ${currentIndex + 1}/${items.length}` : '';
 			}
+			updateCompactSummary(labelText);
 		}
 
 		function moveNavigation(delta) {
@@ -1915,6 +2215,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			applySelectionHighlight(selectedEl);
 			refreshNavigationSlider();
 			updateInfo();
+			if (settings.compactPickerMode && !keepOrigin) {
+				setPickerCompact(true);
+			}
 		}
 
 		let activePanel = null;
@@ -2476,6 +2779,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 			if (enabled) {
 				setPanelVisibility(panel, true);
+				if (!selectedEl) setPickerCompact(false);
 				if (selectedEl) {
 					applySelectionHighlight(selectedEl);
 				}
@@ -2489,6 +2793,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 				removeSelectionHighlight();
 				resetPreview();
+				setPickerCompact(false);
 				initialTouchedElement = null;
 			}
 			console.log(SCRIPT_ID, "Selection mode:", enabled ? "ON" : "OFF");
@@ -2530,14 +2835,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				let shouldRefreshRoots = false;
 				const hasPageChange = mutations.some(mutation => {
 					const target = mutation.target;
-					const targetIsUi = target?.nodeType === 1 && target.closest?.('.mobile-block-ui');
-					if (!target || targetIsUi) return false;
-					return Array.from(mutation.addedNodes || []).some(node => node.nodeType === 1 && !node.closest?.('.mobile-block-ui'));
+					if (!target || isMesInternalNode(target)) return false;
+					return Array.from(mutation.addedNodes || []).some(node => node.nodeType === 1 && !isMesInternalNode(node));
 				});
 				if (!hasPageChange) return;
 				mutations.forEach(mutation => {
 					Array.from(mutation.addedNodes || []).forEach(node => {
-						if (node.nodeType === 1 && !node.closest?.('.mobile-block-ui') && (node.shadowRoot || node.querySelector?.('*'))) {
+						if (node.nodeType === 1 && !isMesInternalNode(node) && (node.shadowRoot || node.querySelector?.('*'))) {
 							shouldRefreshRoots = true;
 						}
 					});
@@ -2565,6 +2869,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		toggleBtn.addEventListener('click', () => {
 			setBlockMode(!selecting);
+		});
+
+		compactToggleBtn.addEventListener('click', () => {
+			setPickerCompact(!pickerCompact);
 		});
 
 		parentBtn.addEventListener('click', () => moveNavigation(-1));
@@ -2633,6 +2941,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 
 		inspectBtn.addEventListener('click', () => {
+			setPickerCompact(false);
 			renderInspector('element');
 			setPanelVisibility(panel, false);
 			setPanelVisibility(inspectorPanel, true);
@@ -2651,7 +2960,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				}
 				applyHiddenStyle(selectedEl);
 
-				previewBtn.textContent = STRINGS.restorePreview;
+				const label = previewBtn.querySelector('.btn-label');
+				if (label) label.textContent = STRINGS.restorePreview;
+				else previewBtn.textContent = STRINGS.restorePreview;
+				previewBtn.setAttribute('aria-label', STRINGS.restorePreview);
+				previewBtn.title = STRINGS.restorePreview;
 				previewBtn.classList.remove('secondary');
 				previewBtn.classList.add('tertiary');
 				isPreviewHidden = true;
@@ -2713,12 +3026,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		listBtn.addEventListener('click', () => {
 			console.log('[listBtn] Clicked');
+			setPickerCompact(false);
 			setPanelVisibility(panel, false);
 			showList();
 		});
 
 		settingsBtn.addEventListener('click', () => {
 			console.log('[settingsBtn] Clicked');
+			setPickerCompact(false);
 			setPanelVisibility(panel, false);
 			setPanelVisibility(settingsPanel, true);
 		});
@@ -3006,6 +3321,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			renderInspector(inspectorTab);
 		});
 		bindBooleanSetting(autoCloseBtn, 'autoCloseAfterCopy');
+		bindBooleanSetting(compactPickerBtn, 'compactPickerMode', (enabled) => {
+			if (!enabled) setPickerCompact(false);
+			else if (selecting && selectedEl) setPickerCompact(true);
+		});
 
 		launcherModeButtons.forEach(button => {
 			button.addEventListener('click', async () => {
@@ -3114,7 +3433,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					return;
 				}
 				const jsonString = JSON.stringify({
-					version: '1.3.0',
+					version: '1.3.1',
 					exportedAt: new Date().toISOString(),
 					settings,
 					rules
@@ -3192,7 +3511,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 							[shadowDomBtn, settings.shadowDomSupport],
 							[selectorHintsBtn, settings.selectorHintMode],
 							[privacyModeBtn, settings.privacyMode],
-							[autoCloseBtn, settings.autoCloseAfterCopy]
+							[autoCloseBtn, settings.autoCloseAfterCopy],
+							[compactPickerBtn, settings.compactPickerMode]
 						].forEach(([button, value]) => {
 							updateSwitch(button, value);
 						});
