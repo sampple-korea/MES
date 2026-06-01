@@ -5,6 +5,17 @@ const { chromium } = require('playwright');
 const repoRoot = path.resolve(__dirname, '..');
 const scriptText = fs.readFileSync(path.join(repoRoot, 'MES.js'), 'utf8');
 
+function buildLexicalGmScript(storage) {
+  const serializedStorage = JSON.stringify(storage || {}).replace(/</g, '\\u003c');
+  return `(() => {
+    const __mesGmStore = new Map(Object.entries(${serializedStorage}));
+    const GM_getValue = (key, defaultValue) => __mesGmStore.has(key) ? __mesGmStore.get(key) : defaultValue;
+    const GM_setValue = (key, value) => { __mesGmStore.set(key, value); };
+    const GM_setClipboard = () => {};
+    ${scriptText}
+  })();`;
+}
+
 async function openMesPage(browser, html, settings = {}, extraStorage = {}, viewportOptions = {}) {
   const viewport = {
     width: viewportOptions.width || 390,
@@ -33,7 +44,8 @@ async function openMesPage(browser, html, settings = {}, extraStorage = {}, view
       localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
     });
   }, { settings, extraStorage });
-  await page.addScriptTag({ content: scriptText });
+  const scriptContent = viewportOptions.lexicalGmStorage ? buildLexicalGmScript(viewportOptions.lexicalGmStorage) : scriptText;
+  await page.addScriptTag({ content: scriptContent });
   await page.waitForSelector('#mobile-block-toggleBtn', { state: 'visible', timeout: 5000 });
   return { context, page, pageErrors };
 }
@@ -733,6 +745,52 @@ async function runSelectorCandidateFlow(browser) {
   await context.close();
 }
 
+async function runLexicalGmStorageFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        .gm-ad { min-height: 96px; padding: 20px; border-radius: 12px; background: #fff2d8; }
+      </style>
+    </head>
+    <body>
+      <main>
+        <section class="gm-ad">GM storage target</section>
+        <section>Content</section>
+      </main>
+    </body>
+  </html>`;
+  const lexicalGmStorage = {
+    mobileElementSelectorSettings_v1_2: JSON.stringify({ compactPickerMode: true, hideStrategy: 'stylesheet' }),
+    mobileBlockedSelectors_v2: JSON.stringify(['mes.test##.gm-ad', 'other.example##.foreign-ad']),
+    mobileDisabledSelectors_v1: '[]'
+  };
+  const { context, page } = await openMesPage(browser, html, {}, {}, { lexicalGmStorage });
+
+  await page.locator('#mobile-block-toggleBtn').click();
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  await page.locator('#blocker-more').click();
+  await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+  await page.locator('#blocker-list').click();
+  await page.waitForSelector('#mobile-blocklist-panel.visible', { timeout: 5000 });
+
+  const currentRow = await page.locator('.blocklist-item').filter({ hasText: '.gm-ad' }).innerText();
+  if (!currentRow.includes('현재 사이트') || !currentRow.includes('1개 매칭')) {
+    throw new Error(`lexical GM current rule was not listed correctly: ${currentRow}`);
+  }
+  const foreignRow = await page.locator('.blocklist-item').filter({ hasText: '.foreign-ad' }).innerText();
+  if (!foreignRow.includes('다른 사이트')) {
+    throw new Error(`lexical GM other-site rule was not listed: ${foreignRow}`);
+  }
+  const localRules = await page.evaluate(() => localStorage.getItem('mobileBlockedSelectors_v2'));
+  if (localRules) throw new Error(`lexical GM flow unexpectedly used page localStorage: ${localRules}`);
+
+  await context.close();
+}
+
 async function run() {
   const browser = await chromium.launch({ headless: true });
   try {
@@ -742,6 +800,7 @@ async function run() {
     await runBlockingGuardFlow(browser);
     await runLegacyImportFlow(browser);
     await runSelectorCandidateFlow(browser);
+    await runLexicalGmStorageFlow(browser);
   } finally {
     await browser.close();
   }

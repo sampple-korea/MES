@@ -229,9 +229,31 @@
 	const BLOCKED_SELECTORS_KEY = 'mobileBlockedSelectors_v2';
 	const DISABLED_SELECTORS_KEY = 'mobileDisabledSelectors_v1';
 
+	function getGmObjectApi(name) {
+		try {
+			if (typeof GM === 'object' && GM && typeof GM[name] === 'function') return GM[name].bind(GM);
+		} catch (e) {}
+		if (typeof globalThis.GM?.[name] === 'function') return globalThis.GM[name].bind(globalThis.GM);
+		return null;
+	}
+
+	function getLegacyGmApi(name) {
+		try {
+			if (name === 'getValue' && typeof GM_getValue === 'function') return GM_getValue;
+			if (name === 'setValue' && typeof GM_setValue === 'function') return GM_setValue;
+			if (name === 'setClipboard' && typeof GM_setClipboard === 'function') return GM_setClipboard;
+		} catch (e) {}
+		if (name === 'getValue' && typeof globalThis.GM_getValue === 'function') return globalThis.GM_getValue;
+		if (name === 'setValue' && typeof globalThis.GM_setValue === 'function') return globalThis.GM_setValue;
+		if (name === 'setClipboard' && typeof globalThis.GM_setClipboard === 'function') return globalThis.GM_setClipboard;
+		return null;
+	}
+
 	async function gmGetValue(key, defaultValue) {
-		if (typeof globalThis.GM_getValue === 'function') return globalThis.GM_getValue(key, defaultValue);
-		if (typeof globalThis.GM?.getValue === 'function') return globalThis.GM.getValue(key, defaultValue);
+		const legacyGetValue = getLegacyGmApi('getValue');
+		if (legacyGetValue) return legacyGetValue(key, defaultValue);
+		const modernGetValue = getGmObjectApi('getValue');
+		if (modernGetValue) return modernGetValue(key, defaultValue);
 		try {
 			const value = localStorage.getItem(key);
 			return value === null ? defaultValue : value;
@@ -240,8 +262,10 @@
 	}
 
 	async function gmSetValue(key, value) {
-		if (typeof globalThis.GM_setValue === 'function') return globalThis.GM_setValue(key, value);
-		if (typeof globalThis.GM?.setValue === 'function') return globalThis.GM.setValue(key, value);
+		const legacySetValue = getLegacyGmApi('setValue');
+		if (legacySetValue) return legacySetValue(key, value);
+		const modernSetValue = getGmObjectApi('setValue');
+		if (modernSetValue) return modernSetValue(key, value);
 		try {
 			localStorage.setItem(key, value);
 		} catch (e) {}
@@ -249,12 +273,14 @@
 	}
 
 	function gmSetClipboard(text) {
-		if (typeof globalThis.GM_setClipboard === 'function') {
-			globalThis.GM_setClipboard(text);
+		const legacySetClipboard = getLegacyGmApi('setClipboard');
+		if (legacySetClipboard) {
+			legacySetClipboard(text);
 			return true;
 		}
-		if (typeof globalThis.GM?.setClipboard === 'function') {
-			globalThis.GM.setClipboard(text);
+		const modernSetClipboard = getGmObjectApi('setClipboard');
+		if (modernSetClipboard) {
+			modernSetClipboard(text);
 			return true;
 		}
 		if (navigator.clipboard?.writeText && window.isSecureContext) {
