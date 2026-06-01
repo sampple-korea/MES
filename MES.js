@@ -158,6 +158,7 @@
 		blocklistCopySite: '적용 규칙 복사',
 		blocklistCopyAll: '전체 복사',
 		blocklistDeleteSite: '현재 사이트 삭제',
+		blocklistPruneStale: '무매칭 정리',
 		blocklistSummary: (total, current, disabled = 0) => `전체 ${total}개 · 현재 사이트 적용 ${current}개${disabled ? ` · 비활성 ${disabled}개` : ''}`,
 		blocklistScopeCurrent: '현재 사이트',
 		blocklistScopeGlobal: '전체',
@@ -170,7 +171,9 @@
 		clearPreviewAction: '해제',
 		rulesCopied: (count) => `${count}개 규칙 복사됨`,
 		confirmDeleteSiteRules: (hostname, count) => `${hostname}에 저장된 규칙 ${count}개를 삭제할까요?`,
+		confirmPruneStaleRules: (count) => `현재 사이트에서 매칭되지 않는 규칙 ${count}개를 정리할까요?`,
 		siteRulesDeleted: (count) => `현재 사이트 규칙 ${count}개 삭제됨`,
+		staleRulesDeleted: (count) => `무매칭 규칙 ${count}개 정리됨`,
 		settingsSaved: '설정 저장됨',
 		settingsSaveError: '설정 저장 실패',
 		backupStarting: '규칙 백업 파일 다운로드를 시작합니다.',
@@ -1443,6 +1446,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
             <div class="button-grid" style="margin-top: 12px; grid-template-columns: 1fr 1fr;">
                 <button id="blocklist-copy-site" class="mb-btn outline">${STRINGS.blocklistCopySite}</button>
                 <button id="blocklist-copy-all" class="mb-btn outline">${STRINGS.blocklistCopyAll}</button>
+                <button id="blocklist-prune-stale" class="mb-btn outline" style="grid-column: span 2;" hidden>${STRINGS.blocklistPruneStale}</button>
                 <button id="blocklist-delete-site" class="mb-btn error" style="grid-column: span 2;">${STRINGS.blocklistDeleteSite}</button>
             </div>
             <button id="blocklist-close" class="mb-btn surface" style="width: 100%; margin-top: 15px;">${STRINGS.close}</button>`;
@@ -2416,6 +2420,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		const listContainer = listPanel.querySelector('#blocklist-container');
 		const listCopySite = listPanel.querySelector('#blocklist-copy-site');
 		const listCopyAll = listPanel.querySelector('#blocklist-copy-all');
+		const listPruneStale = listPanel.querySelector('#blocklist-prune-stale');
 		const listDeleteSite = listPanel.querySelector('#blocklist-delete-site');
 		const listClose = listPanel.querySelector('#blocklist-close');
 
@@ -2911,6 +2916,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			};
 		}
 
+		function getCurrentSiteStaleRules(rules, disabledSet = new Set()) {
+			return (Array.isArray(rules) ? rules : []).filter(rule => {
+				if (disabledSet.has(rule) || !isSiteSpecificRuleForHost(rule)) return false;
+				const parts = getRuleParts(rule);
+				if (!parts?.selector) return false;
+				try {
+					return querySelectorAllEverywhere(parts.selector).length === 0;
+				} catch (e) {
+					return false;
+				}
+			});
+		}
+
 		async function showList() {
 			console.log('[showList] Function called');
 			try {
@@ -2921,8 +2939,13 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				listContainer.innerHTML = '';
 				const activeRules = arr.filter(rule => !disabledSet.has(rule));
 				const currentSiteRules = activeRules.filter(rule => ruleAppliesToHost(rule));
+				const staleSiteRules = getCurrentSiteStaleRules(arr, disabledSet);
 				if (listSummary) {
 					listSummary.textContent = STRINGS.blocklistSummary(arr.length, currentSiteRules.length, disabledSelectorsCache.length);
+				}
+				if (listPruneStale) {
+					listPruneStale.hidden = staleSiteRules.length === 0;
+					listPruneStale.textContent = staleSiteRules.length ? `${STRINGS.blocklistPruneStale} ${staleSiteRules.length}` : STRINGS.blocklistPruneStale;
 				}
 				const filterText = (listSearch?.value || '').trim().toLowerCase();
 				const visibleRules = filterText ? arr.filter(rule => rule.toLowerCase().includes(filterText)) : arr;
@@ -3793,6 +3816,24 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			} else {
 				showToast(STRINGS.clipboardError, 'error');
 			}
+		});
+
+		listPruneStale.addEventListener('click', async () => {
+			const rules = await loadBlockedSelectors();
+			await loadDisabledSelectors();
+			const staleRules = getCurrentSiteStaleRules(rules, new Set(disabledSelectorsCache));
+			if (!staleRules.length) {
+				showToast(STRINGS.blocklistNoMatch, 'info');
+				await showList();
+				return;
+			}
+			if (!confirm(STRINGS.confirmPruneStaleRules(staleRules.length))) return;
+			const staleSet = new Set(staleRules);
+			await saveBlockedSelectors(rules.filter(rule => !staleSet.has(rule)));
+			disableAllBlocking(false);
+			await applyBlocking(false);
+			await showList();
+			showToast(STRINGS.staleRulesDeleted(staleRules.length), 'info');
 		});
 
 		listDeleteSite.addEventListener('click', async () => {
