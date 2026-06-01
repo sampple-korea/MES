@@ -416,8 +416,9 @@ async function runLegacyImportFlow(browser) {
       'mes.test': ['.legacy-ad', '.legacy-ad'],
       'other.example': ['.global-ad']
     },
-    mobileBlockedSelectors_v2: ['other.example##.global-ad']
+    mobileBlockedSelectors_v2: ['other.example##.global-ad', 'mes.test##.stale-ad']
   });
+  page.on('dialog', dialog => dialog.accept());
 
   await page.locator('#mobile-block-toggleBtn').click();
   await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
@@ -438,7 +439,7 @@ async function runLegacyImportFlow(browser) {
   await page.waitForTimeout(500);
 
   const importedRules = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2')));
-  if (!importedRules.includes('mes.test##.legacy-ad') || !importedRules.includes('other.example##.global-ad')) {
+  if (!importedRules.includes('mes.test##.legacy-ad') || !importedRules.includes('other.example##.global-ad') || !importedRules.includes('mes.test##.stale-ad')) {
     throw new Error(`legacy rule was not imported: ${JSON.stringify(importedRules)}`);
   }
   if (importedRules.filter(rule => rule === 'other.example##.global-ad').length !== 1) {
@@ -462,6 +463,10 @@ async function runLegacyImportFlow(browser) {
   if (!otherRow.includes('다른 사이트')) {
     throw new Error(`other-site rule scope chip missing: ${otherRow}`);
   }
+  const staleRow = await page.locator('.blocklist-item').filter({ hasText: '.stale-ad' }).innerText();
+  if (!staleRow.includes('매칭 없음')) {
+    throw new Error(`stale rule chip missing: ${staleRow}`);
+  }
   await page.locator('.blocklist-item').filter({ hasText: '.legacy-ad' }).locator('.blocklist-rule').click();
   await page.locator('.mes-toast-action', { hasText: '해제' }).last().waitFor({ timeout: 5000 });
   const previewVisible = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display !== 'none' && el.classList.contains('mes-selector-candidate-match'));
@@ -470,6 +475,12 @@ async function runLegacyImportFlow(browser) {
   await page.waitForTimeout(350);
   const previewCleared = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display === 'none' && !el.classList.contains('mes-selector-candidate-match'));
   if (!previewCleared) throw new Error('saved rule preview did not restore blocking after clearing');
+  await page.locator('#blocklist-prune-stale').click();
+  await page.waitForTimeout(500);
+  const prunedRules = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2')));
+  if (prunedRules.includes('mes.test##.stale-ad') || !prunedRules.includes('mes.test##.legacy-ad') || !prunedRules.includes('other.example##.global-ad')) {
+    throw new Error(`stale cleanup removed wrong rules: ${JSON.stringify(prunedRules)}`);
+  }
 
   await context.close();
 }
