@@ -159,6 +159,12 @@
 		blocklistCopyAll: '전체 복사',
 		blocklistDeleteSite: '현재 사이트 삭제',
 		blocklistSummary: (total, current, disabled = 0) => `전체 ${total}개 · 현재 사이트 적용 ${current}개${disabled ? ` · 비활성 ${disabled}개` : ''}`,
+		blocklistScopeCurrent: '현재 사이트',
+		blocklistScopeGlobal: '전체',
+		blocklistScopeOther: '다른 사이트',
+		blocklistMatches: (count) => `${count}개 매칭`,
+		blocklistNoMatch: '매칭 없음',
+		blocklistDisabledChip: '꺼짐',
 		rulesCopied: (count) => `${count}개 규칙 복사됨`,
 		confirmDeleteSiteRules: (hostname, count) => `${hostname}에 저장된 규칙 ${count}개를 삭제할까요?`,
 		siteRulesDeleted: (count) => `현재 사이트 규칙 ${count}개 삭제됨`,
@@ -1229,11 +1235,18 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #blocklist-summary { color: var(--md-sys-color-on-surface-variant); font-size: var(--md-sys-typescale-label-small-font-size); text-align: center; margin-top: -4px; margin-bottom: 8px; }
 #blocklist-search { width: 100%; min-height: 34px; border: 0.5px solid rgba(60,60,67,0.12); border-radius: 10px; background-color: rgba(118,118,128,0.10); color: var(--md-sys-color-on-surface); padding: 6px 10px; box-sizing: border-box; font-size: var(--md-sys-typescale-label-large-font-size); outline: none; }
 #blocklist-search::placeholder { color: var(--md-sys-color-on-surface-variant); }
-.blocklist-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 10px; background-color: rgba(118,118,128,0.08); border-radius: 10px; border: 0.5px solid rgba(60,60,67,0.08); transition: background-color 0.2s, border-color 0.2s, opacity 0.3s ease, transform 0.3s ease; }
+.blocklist-item { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; padding: 9px 10px; background-color: rgba(118,118,128,0.08); border-radius: 10px; border: 0.5px solid rgba(60,60,67,0.08); transition: background-color 0.2s, border-color 0.2s, opacity 0.3s ease, transform 0.3s ease; }
 .blocklist-item:hover { background-color: rgba(118,118,128,0.12); border-color: var(--md-sys-color-outline); }
 .blocklist-item.disabled-rule { background-color: rgba(118,118,128,0.05); }
-.blocklist-item.disabled-rule span { opacity: 0.58; text-decoration: line-through; text-decoration-thickness: 1px; }
-.blocklist-item span { flex: 1; word-break: break-all; margin-right: 12px; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); font-family: 'Consolas', 'Monaco', monospace; }
+.blocklist-item.disabled-rule .blocklist-rule-selector { opacity: 0.58; text-decoration: line-through; text-decoration-thickness: 1px; }
+.blocklist-rule { flex: 1; min-width: 0; }
+.blocklist-rule-selector { word-break: break-all; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; line-height: 1.35; }
+.blocklist-rule-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+.blocklist-chip { display: inline-flex; align-items: center; min-height: 18px; padding: 1px 6px; border-radius: 999px; background: rgba(118,118,128,0.10); color: var(--md-sys-color-on-surface-variant); font-size: 10px; font-weight: 700; letter-spacing: 0; }
+.blocklist-chip.current { color: var(--md-sys-color-primary); background: rgba(0,122,255,0.10); }
+.blocklist-chip.match { color: var(--md-sys-color-success); background: rgba(52,199,89,0.10); }
+.blocklist-chip.nomatch { color: var(--md-sys-color-warning); background: rgba(255,149,0,0.10); }
+.blocklist-chip.disabled { color: var(--md-sys-color-error); background: rgba(255,59,48,0.10); }
 .blocklist-controls { display: flex; gap: 6px; flex-shrink: 0; }
 .blocklist-btn { padding: 5px 8px; min-width: auto; min-height: 28px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 9px !important; }
 .blocklist-btn-delete { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
@@ -2825,6 +2838,28 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			} : null);
 		}
 
+		function getRuleListMeta(rule, disabled) {
+			const parts = getRuleParts(rule);
+			const selector = parts?.selector || rule;
+			const appliesHere = !!parts && ruleAppliesToHost(rule);
+			const isGlobal = !!parts && (!parts.domain || parts.domain === '*');
+			let matchCount = null;
+			if (!disabled && appliesHere && parts?.selector) {
+				try {
+					matchCount = querySelectorAllEverywhere(parts.selector).length;
+				} catch (e) {
+					matchCount = 0;
+				}
+			}
+			return {
+				selector,
+				scopeText: isGlobal ? STRINGS.blocklistScopeGlobal : appliesHere ? STRINGS.blocklistScopeCurrent : STRINGS.blocklistScopeOther,
+				scopeClass: appliesHere ? 'current' : '',
+				matchText: disabled ? STRINGS.blocklistDisabledChip : matchCount === null ? '' : matchCount ? STRINGS.blocklistMatches(matchCount) : STRINGS.blocklistNoMatch,
+				matchClass: disabled ? 'disabled' : matchCount > 0 ? 'match' : matchCount === 0 ? 'nomatch' : ''
+			};
+		}
+
 		async function showList() {
 			console.log('[showList] Function called');
 			try {
@@ -2852,9 +2887,28 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						item.className = 'blocklist-item';
 						item.classList.toggle('disabled-rule', disabled);
 
-						const span = document.createElement('span');
-						span.textContent = rule;
-						span.title = rule;
+						const meta = getRuleListMeta(rule, disabled);
+						const ruleBlock = document.createElement('div');
+						ruleBlock.className = 'blocklist-rule';
+						ruleBlock.title = rule;
+
+						const selectorText = document.createElement('div');
+						selectorText.className = 'blocklist-rule-selector';
+						selectorText.textContent = meta.selector;
+
+						const metaRow = document.createElement('div');
+						metaRow.className = 'blocklist-rule-meta';
+						const scopeChip = document.createElement('span');
+						scopeChip.className = `blocklist-chip ${meta.scopeClass}`.trim();
+						scopeChip.textContent = meta.scopeText;
+						metaRow.appendChild(scopeChip);
+						if (meta.matchText) {
+							const matchChip = document.createElement('span');
+							matchChip.className = `blocklist-chip ${meta.matchClass}`.trim();
+							matchChip.textContent = meta.matchText;
+							metaRow.appendChild(matchChip);
+						}
+						ruleBlock.append(selectorText, metaRow);
 
 						const controlsDiv = document.createElement('div');
 						controlsDiv.className = 'blocklist-controls';
@@ -2919,7 +2973,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						});
 
 						controlsDiv.append(copyButton, toggleButton, deleteButton);
-						item.append(span, controlsDiv);
+						item.append(ruleBlock, controlsDiv);
 						listContainer.append(item);
 					});
 				}
