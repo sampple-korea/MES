@@ -132,13 +132,17 @@
 		confirmBroadSelector: (count) => `이 선택자는 ${count}개 요소와 일치합니다. 그대로 저장할까요?`,
 		listShowError: '목록 표시 중 오류 발생',
 		ruleDeleted: '규칙 삭제됨',
+		ruleDisabled: '규칙 비활성화됨',
+		ruleEnabled: '규칙 활성화됨',
 		ruleDeleteError: '규칙 삭제 실패',
 		noMatchingRules: '검색 결과가 없습니다.',
 		blocklistSearchPlaceholder: '규칙 검색',
+		blocklistDisable: '중지',
+		blocklistEnable: '사용',
 		blocklistCopySite: '적용 규칙 복사',
 		blocklistCopyAll: '전체 복사',
 		blocklistDeleteSite: '현재 사이트 삭제',
-		blocklistSummary: (total, current) => `전체 ${total}개 · 현재 사이트 적용 ${current}개`,
+		blocklistSummary: (total, current, disabled = 0) => `전체 ${total}개 · 현재 사이트 적용 ${current}개${disabled ? ` · 비활성 ${disabled}개` : ''}`,
 		rulesCopied: (count) => `${count}개 규칙 복사됨`,
 		confirmDeleteSiteRules: (hostname, count) => `${hostname}에 저장된 규칙 ${count}개를 삭제할까요?`,
 		siteRulesDeleted: (count) => `현재 사이트 규칙 ${count}개 삭제됨`,
@@ -180,6 +184,7 @@
 	let settings = {};
 	const SETTINGS_KEY = 'mobileElementSelectorSettings_v1_2';
 	const BLOCKED_SELECTORS_KEY = 'mobileBlockedSelectors_v2';
+	const DISABLED_SELECTORS_KEY = 'mobileDisabledSelectors_v1';
 
 	async function gmGetValue(key, defaultValue) {
 		if (typeof globalThis.GM_getValue === 'function') return globalThis.GM_getValue(key, defaultValue);
@@ -1099,11 +1104,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 #blocklist-search::placeholder { color: var(--md-sys-color-on-surface-variant); }
 .blocklist-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 10px; background-color: rgba(118,118,128,0.08); border-radius: 10px; border: 0.5px solid rgba(60,60,67,0.08); transition: background-color 0.2s, border-color 0.2s, opacity 0.3s ease, transform 0.3s ease; }
 .blocklist-item:hover { background-color: rgba(118,118,128,0.12); border-color: var(--md-sys-color-outline); }
+.blocklist-item.disabled-rule { background-color: rgba(118,118,128,0.05); }
+.blocklist-item.disabled-rule span { opacity: 0.58; text-decoration: line-through; text-decoration-thickness: 1px; }
 .blocklist-item span { flex: 1; word-break: break-all; margin-right: 12px; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); font-family: 'Consolas', 'Monaco', monospace; }
 .blocklist-controls { display: flex; gap: 6px; flex-shrink: 0; }
 .blocklist-btn { padding: 5px 8px; min-width: auto; min-height: 28px; font-size: var(--md-sys-typescale-label-small-font-size); border-radius: 9px !important; }
 .blocklist-btn-delete { background-color: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
 .blocklist-btn-copy { background-color: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.blocklist-btn-toggle { background-color: rgba(0,122,255,0.10); color: var(--md-sys-color-primary); }
 #blocklist-empty { text-align:center; color: var(--md-sys-color-on-surface-variant); padding: 20px 0; }
 
 .inspector-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; margin-bottom: 10px; padding: 2px; border-radius: 12px; background: rgba(118,118,128,0.12); }
@@ -1471,6 +1479,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		touchMoved = false;
 	const moveThreshold = 15;
 	let blockedSelectorsCache = [];
+	let disabledSelectorsCache = [];
+	let disabledSelectorsLoaded = false;
 
 	async function loadBlockedSelectors() {
 		let stored = '[]';
@@ -1497,11 +1507,53 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		try {
 			await gmSetValue(BLOCKED_SELECTORS_KEY, JSON.stringify(selectorsToSave));
 			blockedSelectorsCache = [...selectorsToSave];
+			const nextDisabled = disabledSelectorsCache.filter(rule => selectorsToSave.includes(rule));
+			if (nextDisabled.length !== disabledSelectorsCache.length) {
+				await saveDisabledSelectors(nextDisabled);
+			}
 			console.log(SCRIPT_ID, `Saved ${selectorsToSave.length} rules.`);
 		} catch (e) {
 			console.error(SCRIPT_ID, "Error saving blocked selectors to GM:", e);
 			showToast(STRINGS.settingsSaveError, 'error');
 		}
+	}
+
+	async function loadDisabledSelectors() {
+		let stored = '[]';
+		try {
+			stored = await gmGetValue(DISABLED_SELECTORS_KEY, '[]');
+			const parsed = JSON.parse(stored);
+			disabledSelectorsCache = Array.isArray(parsed) ? parsed.filter(rule => typeof rule === 'string') : [];
+			disabledSelectorsLoaded = true;
+			return disabledSelectorsCache;
+		} catch (e) {
+			console.error(SCRIPT_ID, `Error parsing disabled selectors from key '${DISABLED_SELECTORS_KEY}', resetting. Stored value:`, stored, e);
+			try {
+				await gmSetValue(DISABLED_SELECTORS_KEY, '[]');
+			} catch (resetError) {
+				console.error(SCRIPT_ID, "Failed to reset disabled storage after parse error", resetError);
+			}
+			disabledSelectorsCache = [];
+			disabledSelectorsLoaded = true;
+			return [];
+		}
+	}
+
+	async function saveDisabledSelectors(list) {
+		const selectorsToSave = Array.from(new Set((Array.isArray(list) ? list : []).filter(rule => typeof rule === 'string' && blockedSelectorsCache.includes(rule))));
+		try {
+			await gmSetValue(DISABLED_SELECTORS_KEY, JSON.stringify(selectorsToSave));
+			disabledSelectorsCache = selectorsToSave;
+			disabledSelectorsLoaded = true;
+		} catch (e) {
+			console.error(SCRIPT_ID, "Error saving disabled selectors to GM:", e);
+			showToast(STRINGS.settingsSaveError, 'error');
+		}
+	}
+
+	function getActiveBlockRules() {
+		const disabledSet = new Set(disabledSelectorsCache);
+		return blockedSelectorsCache.filter(rule => !disabledSet.has(rule));
 	}
 
 	const originalStyleMap = new Map();
@@ -1778,10 +1830,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (blockedSelectorsCache.length === 0) {
 				await loadBlockedSelectors();
 			}
+			if (!disabledSelectorsLoaded) {
+				await loadDisabledSelectors();
+			}
 
 			const currentHostname = location.hostname;
+			const activeBlockRules = getActiveBlockRules();
 			if (settings.hideStrategy === 'stylesheet') {
-				const appliedCount = applyStylesheetBlocking(blockedSelectorsCache, currentHostname);
+				const appliedCount = applyStylesheetBlocking(activeBlockRules, currentHostname);
 				console.log(SCRIPT_ID, `Applied ${appliedCount} stylesheet rules.`);
 				if (showToastNotification && appliedCount > 0 && !settings.tempBlockingDisabled) {
 					showToast(STRINGS.blockingApplied(appliedCount), 'success', 2000);
@@ -1794,7 +1850,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			let appliedCount = 0;
 			const queryRoots = getQueryRoots(document);
 
-			blockedSelectorsCache.forEach(rule => {
+			activeBlockRules.forEach(rule => {
 				const parts = getRuleParts(rule);
 				if (!parts) {
 					console.warn(SCRIPT_ID, "Skipping invalid block rule format:", rule);
@@ -2375,11 +2431,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			console.log('[showList] Function called');
 			try {
 				const arr = await loadBlockedSelectors();
+				await loadDisabledSelectors();
+				const disabledSet = new Set(disabledSelectorsCache);
 				console.log(`[showList] Rendering ${arr.length} rules.`);
 				listContainer.innerHTML = '';
-				const currentSiteRules = arr.filter(rule => ruleAppliesToHost(rule));
+				const activeRules = arr.filter(rule => !disabledSet.has(rule));
+				const currentSiteRules = activeRules.filter(rule => ruleAppliesToHost(rule));
 				if (listSummary) {
-					listSummary.textContent = STRINGS.blocklistSummary(arr.length, currentSiteRules.length);
+					listSummary.textContent = STRINGS.blocklistSummary(arr.length, currentSiteRules.length, disabledSelectorsCache.length);
 				}
 				const filterText = (listSearch?.value || '').trim().toLowerCase();
 				const visibleRules = filterText ? arr.filter(rule => rule.toLowerCase().includes(filterText)) : arr;
@@ -2390,8 +2449,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					listContainer.innerHTML = `<p id="blocklist-empty">${STRINGS.noMatchingRules}</p>`;
 				} else {
 					visibleRules.forEach((rule, index) => {
+						const disabled = disabledSet.has(rule);
 						const item = document.createElement('div');
 						item.className = 'blocklist-item';
+						item.classList.toggle('disabled-rule', disabled);
 
 						const span = document.createElement('span');
 						span.textContent = rule;
@@ -2410,6 +2471,21 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 							} else {
 								showToast(STRINGS.clipboardError, 'error');
 							}
+						});
+
+						const toggleButton = document.createElement('button');
+						toggleButton.className = 'mb-btn blocklist-btn blocklist-btn-toggle';
+						toggleButton.textContent = disabled ? STRINGS.blocklistEnable : STRINGS.blocklistDisable;
+						toggleButton.title = disabled ? STRINGS.ruleEnabled : STRINGS.ruleDisabled;
+						toggleButton.addEventListener('click', async () => {
+							const nextDisabled = disabledSet.has(rule) ?
+								disabledSelectorsCache.filter(disabledRule => disabledRule !== rule) :
+								[...disabledSelectorsCache, rule];
+							await saveDisabledSelectors(nextDisabled);
+							disableAllBlocking(false);
+							await applyBlocking(false);
+							await showList();
+							showToast(disabledSet.has(rule) ? STRINGS.ruleEnabled : STRINGS.ruleDisabled, 'info', 1600);
 						});
 
 						const deleteButton = document.createElement('button');
@@ -2444,7 +2520,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 							}
 						});
 
-						controlsDiv.append(copyButton, deleteButton);
+						controlsDiv.append(copyButton, toggleButton, deleteButton);
 						item.append(span, controlsDiv);
 						listContainer.append(item);
 					});
@@ -3124,7 +3200,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		});
 
 		listCopySite.addEventListener('click', async () => {
-			const rules = (await loadBlockedSelectors()).filter(rule => ruleAppliesToHost(rule));
+			await loadDisabledSelectors();
+			const disabledSet = new Set(disabledSelectorsCache);
+			const rules = (await loadBlockedSelectors()).filter(rule => ruleAppliesToHost(rule) && !disabledSet.has(rule));
 			if (!rules.length) {
 				showToast(STRINGS.noRules, 'info');
 				return;
@@ -3496,6 +3574,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		backupBtn.addEventListener('click', async () => {
 			try {
 				const rules = await loadBlockedSelectors();
+				const disabledRules = await loadDisabledSelectors();
 				if (rules.length === 0) {
 					showToast(STRINGS.backupNoRules, 'info');
 					return;
@@ -3504,7 +3583,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					version: '1.3.1',
 					exportedAt: new Date().toISOString(),
 					settings,
-					rules
+					rules,
+					disabledRules
 				}, null, 2);
 				const blob = new Blob([jsonString], {
 					type: 'application/json'
@@ -3549,6 +3629,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					}
 
 					await saveBlockedSelectors(normalized.rules);
+					const restoredDisabledRules = Array.isArray(parsedBackup?.disabledRules) ? parsedBackup.disabledRules : [];
+					const normalizedDisabled = normalizeRulesForStorage(restoredDisabledRules).rules.filter(rule => normalized.rules.includes(rule));
+					await saveDisabledSelectors(normalizedDisabled);
 					if (parsedBackup && !Array.isArray(parsedBackup) && parsedBackup.settings && typeof parsedBackup.settings === 'object') {
 						settings = {
 							...DEFAULT_SETTINGS,
