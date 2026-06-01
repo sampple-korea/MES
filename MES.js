@@ -298,6 +298,7 @@
 		'type'
 	];
 	const RESOURCE_ATTRIBUTES = ['href', 'src', 'data-src', 'data-original', 'poster', 'action'];
+	const SRCSET_ATTRIBUTES = ['srcset', 'data-srcset'];
 	const VOLATILE_CLASS_RE = /active|select|selected|focus|hover|disabled|checked|open|closed|visible|hidden|loading|transition|animate|animating|enter|leave|js-|ui-|css-|style-/i;
 	const DYNAMIC_TOKEN_RE = /(?:^|[-_])(?:ember|react|vue|ng|svelte|random|hash|uuid|nonce|temp|tmp)(?:[-_]|$)|[a-f0-9]{7,}|[_-]?\d{3,}/i;
 	const BROAD_SELECTOR_HINT_RE = /(ad|ads|advert|banner|sponsor|promoted|promotion|popup|pop|modal|overlay|interstitial|notice|recommend|related|widget|slot|wing)/i;
@@ -663,6 +664,15 @@
 		}
 	}
 
+	function parseSrcsetCandidate(value) {
+		const text = String(value || '').trim();
+		if (!text) return '';
+		const first = text.split(',').map(candidate => candidate.trim()).find(Boolean);
+		if (!first) return '';
+		const urlPart = first.match(/^(\S+)/)?.[1] || '';
+		return urlPart.replace(/^['"]|['"]$/g, '');
+	}
+
 	function findNearestUrl(el) {
 		let current = el;
 		for (let depth = 0; current && depth < 6; depth++) {
@@ -676,10 +686,21 @@
 					}
 				}
 			}
+			for (const attrName of SRCSET_ATTRIBUTES) {
+				const value = current.getAttribute?.(attrName);
+				const candidate = parseSrcsetCandidate(value);
+				if (candidate) {
+					try {
+						return new URL(candidate, location.href).href;
+					} catch (e) {
+						return candidate;
+					}
+				}
+			}
 
 			try {
 				const backgroundImage = window.getComputedStyle(current).backgroundImage;
-				const match = backgroundImage && backgroundImage.match(/url\(["']?(.*?)["']?\)/);
+				const match = backgroundImage && backgroundImage.match(/url\(["']?([^"')]+)["']?\)/);
 				if (match?.[1]) {
 					return new URL(match[1], location.href).href;
 				}
