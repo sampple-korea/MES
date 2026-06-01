@@ -448,6 +448,20 @@ async function runLegacyImportFlow(browser) {
   if (!hidden) throw new Error('imported legacy rule was not applied');
   const importDisabled = await page.locator('#settings-legacy-import').evaluate(button => button.disabled);
   if (!importDisabled) throw new Error('legacy import button should be disabled after importing all rules');
+  await page.locator('#settings-close').click();
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  const secondaryVisible = await page.locator('#blocker-secondary-actions').evaluate(el => el.classList.contains('visible'));
+  if (!secondaryVisible) await page.locator('#blocker-more').click();
+  await page.locator('#blocker-list').click();
+  await page.waitForSelector('#mobile-blocklist-panel.visible', { timeout: 5000 });
+  const legacyRow = await page.locator('.blocklist-item').filter({ hasText: '.legacy-ad' }).innerText();
+  if (!legacyRow.includes('현재 사이트') || !legacyRow.includes('1개 매칭')) {
+    throw new Error(`legacy rule impact chips missing: ${legacyRow}`);
+  }
+  const otherRow = await page.locator('.blocklist-item').filter({ hasText: '.global-ad' }).innerText();
+  if (!otherRow.includes('다른 사이트')) {
+    throw new Error(`other-site rule scope chip missing: ${otherRow}`);
+  }
 
   await context.close();
 }
