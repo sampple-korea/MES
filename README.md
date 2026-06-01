@@ -2,25 +2,27 @@
 
 MES는 모바일 브라우저에서 웹페이지 요소를 직접 선택하고 숨김 규칙을 관리할 수 있는 고급 userscript입니다. 작은 화면에서도 덜 가리는 컴팩트한 패널, 안정적인 선택자 생성, 저장 규칙 관리, 동적 페이지 재적용을 중심으로 설계했습니다.
 
-[GitHub에서 설치](https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js) · [소스 코드](https://github.com/sampple-korea/MES)
+[GitHub에서 설치](https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.min.js) · [소스 코드](https://github.com/sampple-korea/MES)
 
-## 2.0.1
+## 2.1.0
 
-MES 2.0.1은 2.0.0 기반에 GitHub 설치/업데이트 경로, 한국어 README, 기능 캡처 갤러리, 타 MES(Picky) 마이그레이션 안내, userscript GM 저장소 감지와 기존 규칙 보존 보강을 더한 패치 릴리즈입니다.
+MES 2.1.0은 고급 광고 패턴 후보, 저사양 모드, minified 배포 파일을 추가한 기능 릴리즈입니다. 기존 개발용 `MES.js`는 유지하고 설치/업데이트는 `MES.min.js`를 기본으로 사용합니다.
 
-자세한 변경점은 [RELEASE_NOTES_2.0.1.md](RELEASE_NOTES_2.0.1.md)를 참고하세요. 2.0.0의 메이저 변경점은 [RELEASE_NOTES_2.0.0.md](RELEASE_NOTES_2.0.0.md)에 정리되어 있습니다.
+자세한 변경점은 [RELEASE_NOTES_2.1.0.md](RELEASE_NOTES_2.1.0.md)를 참고하세요. 2.0.0의 메이저 변경점은 [RELEASE_NOTES_2.0.0.md](RELEASE_NOTES_2.0.0.md)에 정리되어 있습니다.
 
 ## 주요 기능
 
 - 모바일 터치에 맞춘 요소 선택기와 상위/하위 요소 탐색
 - 저장 전 선택자 품질과 위험도 표시
 - 정밀, 유사 패턴, 속성, 클래스, 리소스 기반 선택자 후보 제공
+- 동적 광고 ID/class/src/link를 겨냥하는 고급 차단 후보 제공
 - 저장 규칙 검색, 복사, 활성/비활성, 현재 사이트 정리, 백업, 복원
 - 저장 직후 실행 취소와 현재 페이지 매치 영향 미리보기
 - 현재 페이지에서 더 이상 매치되지 않는 오래된 규칙 정리
 - open Shadow DOM 내부 선택과 host 범위 규칙 생성
 - DOM 변경, class/id/hidden 속성 변경, Shadow DOM 변경 후 규칙 재적용
 - 페이지가 숨김 스타일이나 규칙 stylesheet를 건드려도 다시 복구하는 차단 무결성 보호
+- 차단 성능 저하 가능성을 안내하는 저사양 모드
 - CSS 규칙 기반 숨김과 민감하거나 지원되지 않는 선택자용 inline fallback
 - 페이지가 MES UI 노드, ID, class, hidden 상태, style을 바꿔도 복구하는 UI 자가 치유
 - display, visibility, opacity, CSS 기반 숨김 방식
@@ -59,7 +61,7 @@ MES 2.0.1은 2.0.0 기반에 GitHub 설치/업데이트 경로, 한국어 README
 Tampermonkey, Violentmonkey 같은 userscript 매니저를 설치한 뒤 아래 주소를 열어 설치하세요.
 
 ```text
-https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.js
+https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.min.js
 ```
 
 업데이트도 같은 GitHub 주소를 사용합니다.
@@ -105,6 +107,7 @@ MES는 기존 필터 데이터가 감지될 때만 설정 화면에 마이그레
 | `toggleOpacity` | 0.62 | 런처 버튼 투명도 |
 | `showShieldIcon` | false | 런처에 방패 아이콘 표시 |
 | `observeDomChanges` | true | 동적 DOM 변경 시 저장 규칙 재적용 |
+| `lowPowerMode` | false | 동적 감시 강도를 낮추는 저사양 모드 |
 | `shadowDomSupport` | true | open Shadow DOM 내부 요소 탐색 |
 | `selectorHintMode` | true | 안정적인 선택자 힌트 생성 |
 | `privacyMode` | true | 쿠키와 리소스 URL의 민감 정보 보호 |

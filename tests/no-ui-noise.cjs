@@ -7,6 +7,7 @@ const sharedForbiddenPatterns = [
 ];
 const fileChecks = {
   'MES.js': sharedForbiddenPatterns,
+  ...(fs.existsSync('MES.min.js') ? { 'MES.min.js': sharedForbiddenPatterns } : {}),
   'README.md': sharedForbiddenPatterns
 };
 

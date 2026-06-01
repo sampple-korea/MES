@@ -1,15 +1,18 @@
 {
   "name": "mes-userscript",
-  "version": "2.0.1",
+  "version": "2.1.0",
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "check:syntax": "node --check MES.js",
+    "build": "node scripts/build-minified.cjs",
+    "check:syntax": "node --check MES.js && node --check MES.min.js",
     "check:noise": "node tests/no-ui-noise.cjs",
     "test:smoke": "node tests/mes-smoke.cjs",
-    "test": "npm run check:syntax && npm run check:noise && npm run test:smoke"
+    "test:smoke:min": "node -e \"process.env.MES_SCRIPT_FILE='MES.min.js'; require('./tests/mes-smoke.cjs')\"",
+    "test": "npm run build && npm run check:syntax && npm run check:noise && npm run test:smoke && npm run test:smoke:min"
   },
   "devDependencies": {
-    "playwright": "^1.52.0"
+    "playwright": "^1.52.0",
+    "terser": "^5.48.0"
   }
 }
