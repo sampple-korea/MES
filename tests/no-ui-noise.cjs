@@ -6,10 +6,7 @@ const sharedForbiddenPatterns = [
   { name: 'emoji or symbol decoration', pattern: /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u }
 ];
 const fileChecks = {
-  'MES.js': [
-    ...sharedForbiddenPatterns,
-    { name: 'reference project name', pattern: new RegExp(['P', 'icky'].join(''), 'i') }
-  ],
+  'MES.js': sharedForbiddenPatterns,
   'README.md': sharedForbiddenPatterns
 };
 

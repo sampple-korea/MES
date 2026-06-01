@@ -592,9 +592,9 @@ async function runLegacyImportFlow(browser) {
     </body>
   </html>`;
 
-  const legacyKey = ['pi', 'cky_blocked_rules'].join('');
+  const pickyLegacyKey = 'picky_blocked_rules';
   const { context, page } = await openMesPage(browser, html, { compactPickerMode: true }, {
-    [legacyKey]: {
+    [pickyLegacyKey]: {
       'mes.test': ['.legacy-ad', '.legacy-ad'],
       'other.example': ['.global-ad']
     },
