@@ -1268,6 +1268,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	const originalStyleMap = new Map();
 	const hiddenElements = new Set();
 	let applyingBlocking = false;
+	let pendingBlockingApply = false;
 
 	function rememberOriginalStyles(el) {
 		if (!el || originalStyleMap.has(el)) return;
@@ -1331,7 +1332,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			disableAllBlocking(false);
 			return 0;
 		}
-		if (applyingBlocking) return 0;
+		if (applyingBlocking) {
+			pendingBlockingApply = true;
+			return 0;
+		}
 		applyingBlocking = true;
 
 		try {
@@ -1390,6 +1394,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			return appliedCount;
 		} finally {
 			applyingBlocking = false;
+			if (pendingBlockingApply && !settings.tempBlockingDisabled) {
+				pendingBlockingApply = false;
+				setTimeout(() => applyBlocking(false), 80);
+			}
 		}
 	}
 
@@ -2331,7 +2339,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			};
 
 			domObserver = new MutationObserver((mutations) => {
-				if (applyingBlocking) return;
+				if (applyingBlocking) {
+					pendingBlockingApply = true;
+					return;
+				}
 				let shouldRefreshRoots = false;
 				const hasPageChange = mutations.some(mutation => {
 					const target = mutation.target;
