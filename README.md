@@ -4,6 +4,12 @@ Mobile Element Selector is a mobile-first userscript for selecting page elements
 
 [Greasy Fork](https://greasyfork.org/en/scripts/534270-mes-mobile-element-selector) · [Install script](https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js) · [Source](https://github.com/sampple-korea/MES)
 
+## 2.0.0
+
+MES 2.0.0 upgrades the earlier 1.x experience with a cleaner compact mobile UI, safer selector candidates, richer rule management, stronger dynamic-page monitoring, blocking integrity recovery, UI self-healing, gesture launcher settings, tablet layout checks, and broader Playwright smoke coverage.
+
+See [RELEASE_NOTES_2.0.0.md](RELEASE_NOTES_2.0.0.md) for the full upgrade summary.
+
 ## Overview
 
 MES helps you build and manage element-blocking rules directly from a mobile browser. It focuses on touch-friendly selection, resilient selector generation, clean inspection tools, and persistent per-site hiding rules without requiring desktop developer tools.
@@ -36,7 +42,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 
 ## Install
 
-Install a userscript manager such as Tampermonkey, Violentmonkey, or AdGuard userscripts, then open the install URL:
+Install a compatible userscript manager, then open the install URL:
 
 ```text
 https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js
@@ -58,7 +64,7 @@ https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%2
 | `panelOpacity` | 0.94 | 설정/차단 패널의 투명도 |
 | `toggleSizeScale` | 1.0 | 토글 버튼 크기 비율 |
 | `toggleOpacity` | 0.62 | 토글 버튼 투명도 |
-| `showAdguardLogo` | false | AdGuard 로고 표시 여부 |
+| `showShieldIcon` | false | 방패 아이콘 표시 여부 |
 | `observeDomChanges` | true | 동적 DOM 변경 시 저장 규칙 재적용 |
 | `shadowDomSupport` | true | open Shadow DOM 내부 요소 탐색 |
 | `selectorHintMode` | true | 안정적인 선택자 힌트 생성 |

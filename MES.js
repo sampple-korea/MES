@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         MES(Mobile Element Selector)
 // @author       삼플
-// @version      1.3.1
+// @version      2.0.0
 // @description  Material M3의 진보한 디자인, 아름다운 애니메이션, 완벽한 기능을 가진 모바일 요소 선택기
 // @match        *://*/*
 // @license      Apache-2.0
@@ -12,14 +12,14 @@
 // @grant        GM.setClipboard
 // @grant        GM.setValue
 // @grant        GM.getValue
-// @namespace https://adguard.com
+// @namespace https://github.com/sampple-korea/MES
 // @downloadURL https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.user.js
 // @updateURL https://update.greasyfork.org/scripts/534270/MES%28Mobile%20Element%20Selector%29.meta.js
 // ==/UserScript==
 
 (async function() {
 	'use strict';
-	const SCRIPT_ID = "[MES v1.3.1 M3]";
+	const SCRIPT_ID = "[MES v2.0.0]";
 	const HIGHLIGHT_CLASS = 'mes-selected-element';
 	const LEGACY_HIGHLIGHT_CLASS = 'selected-element';
 	const CANDIDATE_PREVIEW_CLASS = 'mes-selector-candidate-match';
@@ -30,7 +30,7 @@
 	const TOGGLE_BASE_SIZE = 28;
 	const TOGGLE_HITBOX_SIZE = 44;
 	const TOGGLE_MIN_VISUAL_SCALE = 0.75;
-	const ALT_TOGGLE_LOGO_URL = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Cpath fill=%22%23a0c9ff%22 d=%22M32 5 52 13v15c0 13.9-8.1 25.9-20 31C20.1 53.9 12 41.9 12 28V13l20-8Z%22/%3E%3Cpath fill=%22%2300325a%22 d=%22M22 25h20v6H22v-6Zm0 10h14v6H22v-6Z%22/%3E%3C/svg%3E';
+	const SHIELD_TOGGLE_ICON_URL = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22%3E%3Cpath fill=%22%23a0c9ff%22 d=%22M32 5 52 13v15c0 13.9-8.1 25.9-20 31C20.1 53.9 12 41.9 12 28V13l20-8Z%22/%3E%3Cpath fill=%22%2300325a%22 d=%22M22 25h20v6H22v-6Zm0 10h14v6H22v-6Z%22/%3E%3C/svg%3E';
 
 	const STRINGS = {
 		panelTitle: '요소 차단',
@@ -61,7 +61,7 @@
 		inspectorTitle: '요소 정보',
 		copyInfo: '정보 복사',
 		includeSiteNameLabel: '규칙에 사이트명 포함',
-		useAdguardLogoLabel: '토글 버튼 방패 스타일',
+		useShieldIconLabel: '토글 버튼 방패 스타일',
 		panelOpacityLabel: '패널 투명도',
 		toggleSizeLabel: '토글 버튼 크기',
 		toggleOpacityLabel: '토글 버튼 투명도',
@@ -153,6 +153,7 @@
 		ruleAddError: '규칙 추가 중 오류:',
 		ruleExists: '이미 저장된 규칙입니다.',
 		confirmBroadSelector: (count) => `이 선택자는 ${count}개 요소와 일치합니다. 그대로 저장할까요?`,
+		confirmRiskSelector: (label, reason) => `선택자 품질: ${label}\n${reason}\n그대로 저장할까요?`,
 		listShowError: '목록 표시 중 오류 발생',
 		ruleDeleted: '규칙 삭제됨',
 		ruleDisabled: '규칙 비활성화됨',
@@ -207,7 +208,7 @@
 		panelOpacity: 0.94,
 		toggleSizeScale: 1.0,
 		toggleOpacity: 0.62,
-		showAdguardLogo: false,
+		showShieldIcon: false,
 		tempBlockingDisabled: false,
 		observeDomChanges: true,
 		shadowDomSupport: true,
@@ -293,7 +294,11 @@
 			settings.toggleOpacity = DEFAULT_SETTINGS.toggleOpacity;
 		}
 		settings.includeSiteName = typeof settings.includeSiteName === 'boolean' ? settings.includeSiteName : DEFAULT_SETTINGS.includeSiteName;
-		settings.showAdguardLogo = typeof settings.showAdguardLogo === 'boolean' ? settings.showAdguardLogo : DEFAULT_SETTINGS.showAdguardLogo;
+		const legacyShieldIconKey = ['show', 'Ad', 'guard', 'Logo'].join('');
+		settings.showShieldIcon = typeof settings.showShieldIcon === 'boolean'
+			? settings.showShieldIcon
+			: (typeof settings[legacyShieldIconKey] === 'boolean' ? settings[legacyShieldIconKey] : DEFAULT_SETTINGS.showShieldIcon);
+		delete settings[legacyShieldIconKey];
 		settings.tempBlockingDisabled = typeof settings.tempBlockingDisabled === 'boolean' ? settings.tempBlockingDisabled : DEFAULT_SETTINGS.tempBlockingDisabled;
 		settings.observeDomChanges = typeof settings.observeDomChanges === 'boolean' ? settings.observeDomChanges : DEFAULT_SETTINGS.observeDomChanges;
 		settings.shadowDomSupport = typeof settings.shadowDomSupport === 'boolean' ? settings.shadowDomSupport : DEFAULT_SETTINGS.shadowDomSupport;
@@ -1120,7 +1125,7 @@ html.${ISOLATE_ACTIVE_CLASS} .mobile-block-ui * {
 #mobile-block-toggleBtn .toggle-icon { position: relative; z-index: 1; width: calc(var(--toggle-size) * 0.46); height: calc(var(--toggle-size) * 0.46); display: block; margin: auto; background-color: currentColor; mask-size: contain; mask-repeat: no-repeat; mask-position: center; -webkit-mask-size: contain; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; }
 #mobile-block-toggleBtn .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 5h6v6H5V5Zm8 0h6v6h-6V5ZM5 13h6v6H5v-6Zm8 0h6v6h-6v-6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M5 5h6v6H5V5Zm8 0h6v6h-6V5ZM5 13h6v6H5v-6Zm8 0h6v6h-6v-6Z"/></svg>'); }
 #mobile-block-toggleBtn.selecting .toggle-icon-plus { mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 3h2v5h-2V3Zm0 13h2v5h-2v-5ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-4-2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>'); -webkit-mask-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M11 3h2v5h-2V3Zm0 13h2v5h-2v-5ZM3 11h5v2H3v-2Zm13 0h5v2h-5v-2Zm-4-2a3 3 0 1 1 0 6 3 3 0 0 1 0-6Z"/></svg>'); }
-#mobile-block-toggleBtn .toggle-icon-adguard { background-image: url('${ALT_TOGGLE_LOGO_URL}'); background-size: contain; background-repeat: no-repeat; background-position: center; background-color: transparent !important; mask-image: none; -webkit-mask-image: none; width: 60%; height: 60%; }
+#mobile-block-toggleBtn .toggle-icon-shield { background-image: url('${SHIELD_TOGGLE_ICON_URL}'); background-size: contain; background-repeat: no-repeat; background-position: center; background-color: transparent !important; mask-image: none; -webkit-mask-image: none; width: 60%; height: 60%; }
 
 .mb-btn { padding: 7px 12px; border: 0.5px solid transparent; border-radius: 10px !important; font-size: var(--md-sys-typescale-label-large-font-size); font-weight: 600; cursor: pointer; transition: background-color 0.16s ease, transform 0.12s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.16s ease, border-color 0.16s ease, color 0.16s ease; text-align: center; box-shadow: none; min-width: 0; min-height: 34px; overflow: hidden; white-space: normal; overflow-wrap: anywhere; word-break: keep-all; text-overflow: clip; opacity: 1 !important; -webkit-tap-highlight-color: transparent !important; line-height: 1.16; display: inline-flex; align-items: center; justify-content: center; letter-spacing: 0; }
 .mb-btn:hover { box-shadow: 0 1px 5px rgba(0,0,0,0.08); }
@@ -1565,8 +1570,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
                 </label>
             </div>
             <div class="settings-item">
-                <label><span class="settings-label-text">${STRINGS.useAdguardLogoLabel}</span>
-                    <button id="settings-adguard-logo" class="mb-btn mes-switch ${settings.showAdguardLogo ? 'active' : ''}" role="switch" aria-checked="${settings.showAdguardLogo}" aria-label="${STRINGS.useAdguardLogoLabel}"><span class="switch-knob"></span></button>
+                <label><span class="settings-label-text">${STRINGS.useShieldIconLabel}</span>
+                    <button id="settings-shield-icon" class="mb-btn mes-switch ${settings.showShieldIcon ? 'active' : ''}" role="switch" aria-checked="${settings.showShieldIcon}" aria-label="${STRINGS.useShieldIconLabel}"><span class="switch-knob"></span></button>
                 </label>
             </div>
             <div class="settings-section-title">차단</div>
@@ -1900,6 +1905,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		return 'display: none !important;';
 	}
 
+	function getSheetSignature(sheet) {
+		try {
+			return Array.from(sheet?.cssRules || []).map(rule => rule.cssText).join('\n');
+		} catch (e) {
+			return '';
+		}
+	}
+
+	function getNodeStyleSignature(node) {
+		if (!node?.isConnected) return '';
+		return getSheetSignature(node.sheet) || node.textContent.trim();
+	}
+
 	function isHiddenElementStillSuppressed(el) {
 		if (!el?.isConnected) return true;
 		try {
@@ -1913,9 +1931,10 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	}
 
 	function adoptedStyleHandlesIntact() {
-		return adoptedStyleHandles.every(({ root, sheet }) => {
+		return adoptedStyleHandles.every(({ root, sheet, signature }) => {
 			try {
-				return Array.from(root?.adoptedStyleSheets || []).includes(sheet);
+				return Array.from(root?.adoptedStyleSheets || []).includes(sheet) &&
+					getSheetSignature(sheet) === signature;
 			} catch (e) {
 				return false;
 			}
@@ -1923,7 +1942,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 	}
 
 	function styleRuleNodesIntact() {
-		return Array.from(styleRuleNodes).every(node => node?.isConnected && node.textContent.trim());
+		return Array.from(styleRuleNodes).every(node => {
+			return node?.isConnected &&
+				node.textContent.trim() &&
+				getNodeStyleSignature(node) === node.dataset.mesStyleSignature;
+		});
 	}
 
 	function blockingIntegrityNeedsRefresh() {
@@ -2047,13 +2070,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				const sheet = new CSSStyleSheet();
 				sheet.replaceSync(cssText);
 				root.adoptedStyleSheets = [...currentSheets, sheet];
-				adoptedStyleHandles.push({ root, sheet });
+				adoptedStyleHandles.push({ root, sheet, signature: getSheetSignature(sheet) });
 				return true;
 			} catch (e) {}
 		}
 		const node = ensureBlockStyleNode(root);
 		if (!node) return false;
 		node.textContent = cssText;
+		node.dataset.mesStyleSignature = getNodeStyleSignature(node) || cssText.trim();
 		return true;
 	}
 
@@ -2265,8 +2289,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 	function updateToggleIcon() {
 		if (!toggleBtn) return;
-		if (settings.showAdguardLogo) {
-			toggleBtn.innerHTML = `<span class="toggle-icon toggle-icon-adguard" aria-hidden="true"></span>`;
+		if (settings.showShieldIcon) {
+			toggleBtn.innerHTML = `<span class="toggle-icon toggle-icon-shield" aria-hidden="true"></span>`;
 		} else {
 			toggleBtn.innerHTML = `<span class="toggle-icon toggle-icon-plus" aria-hidden="true"></span>`;
 		}
@@ -2544,6 +2568,12 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		};
 	}
 
+	function confirmSelectorRiskIfNeeded(risk, alreadyConfirmedBroad = false) {
+		if (!risk || risk.level === 'safe') return true;
+		if (alreadyConfirmedBroad && risk.level === 'broad') return true;
+		return confirm(STRINGS.confirmRiskSelector(risk.label, risk.reason));
+	}
+
 	function getSelectorQuality(selector, el) {
 		const root = getSelectorRoot(el);
 		const matchCount = countSelectorMatches(selector, root);
@@ -2610,7 +2640,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		const settingsClose = settingsPanel.querySelector('#settings-close');
 		const toggleSiteBtn = settingsPanel.querySelector('#settings-toggle-site');
-		const adguardLogoToggleBtn = settingsPanel.querySelector('#settings-adguard-logo');
+		const shieldIconToggleBtn = settingsPanel.querySelector('#settings-shield-icon');
 		const tempDisableBtn = settingsPanel.querySelector('#settings-temp-disable');
 		const observeDomBtn = settingsPanel.querySelector('#settings-observe-dom');
 		const shadowDomBtn = settingsPanel.querySelector('#settings-shadow-dom');
@@ -3715,7 +3745,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			if (!settings.observeDomChanges || settings.tempBlockingDisabled) return;
 
 			const observeRoot = (root) => {
-				if (!root || observedMutationRoots.has(root)) return;
+				if (!root || observedMutationRoots.has(root)) return false;
 				try {
 					domObserver.observe(root, {
 						childList: true,
@@ -3725,12 +3755,18 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						characterData: true
 					});
 					observedMutationRoots.add(root);
+					return true;
 				} catch (e) {}
+				return false;
 			};
 
 			const observeOpenShadowRoots = (root = document) => {
-				if (!settings.shadowDomSupport) return;
-				collectOpenShadowRoots(root).forEach(observeRoot);
+				if (!settings.shadowDomSupport) return false;
+				let addedRoot = false;
+				collectOpenShadowRoots(root).forEach(shadowRoot => {
+					if (observeRoot(shadowRoot)) addedRoot = true;
+				});
+				return addedRoot;
 			};
 
 			domObserver = new MutationObserver((mutations) => {
@@ -3784,7 +3820,14 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 			observeRoot(document.documentElement);
 			observeOpenShadowRoots(document);
-			blockGuardInterval = setInterval(() => scheduleBlockingIntegrityCheck(0), 2500);
+			blockGuardInterval = setInterval(() => {
+				const foundNewShadowRoots = observeOpenShadowRoots(document);
+				if (foundNewShadowRoots) {
+					applyBlocking(false);
+				} else {
+					scheduleBlockingIntegrityCheck(0);
+				}
+			}, 2500);
 		}
 
 
@@ -3949,7 +3992,12 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					return;
 				}
 				const selectorQuality = getSelectorQuality(selector, selectedEl);
-				if (selectorQuality.matchCount > 1 && !confirm(STRINGS.confirmBroadSelector(selectorQuality.matchCount))) {
+				const risk = analyzeSelectorRisk(selector, selectedEl, selectorQuality);
+				const broadConfirmed = selectorQuality.matchCount > 1;
+				if (broadConfirmed && !confirm(STRINGS.confirmBroadSelector(selectorQuality.matchCount))) {
+					return;
+				}
+				if (!confirmSelectorRiskIfNeeded(risk, broadConfirmed)) {
 					return;
 				}
 
@@ -4124,7 +4172,11 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						showToast(matchCount ? STRINGS.selectorCandidatePreview(matchCount) : STRINGS.cannotGenerateSelector, matchCount ? 'info' : 'error');
 						return;
 					}
-					if (candidate.matchCount > 1 && !confirm(STRINGS.confirmBroadSelector(candidate.matchCount))) {
+					const broadConfirmed = candidate.matchCount > 1;
+					if (broadConfirmed && !confirm(STRINGS.confirmBroadSelector(candidate.matchCount))) {
+						return;
+					}
+					if (!confirmSelectorRiskIfNeeded(candidate.risk, broadConfirmed)) {
 						return;
 					}
 					clearCandidatePreview();
@@ -4313,9 +4365,9 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			showToast(STRINGS.settingsSaved, 'info', 1500);
 		});
 
-		adguardLogoToggleBtn.addEventListener('click', async () => {
-			settings.showAdguardLogo = !settings.showAdguardLogo;
-			updateSwitch(adguardLogoToggleBtn, settings.showAdguardLogo);
+		shieldIconToggleBtn.addEventListener('click', async () => {
+			settings.showShieldIcon = !settings.showShieldIcon;
+			updateSwitch(shieldIconToggleBtn, settings.showShieldIcon);
 			updateToggleIcon();
 			await saveSettings();
 			showToast(STRINGS.settingsSaved, 'info', 1500);
@@ -4520,7 +4572,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					return;
 				}
 				const jsonString = JSON.stringify({
-					version: '1.3.1',
+					version: '2.0.0',
 					exportedAt: new Date().toISOString(),
 					settings,
 					rules,
@@ -4597,7 +4649,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 					if (settingsPanel.classList.contains('visible')) {
 						[
 							[toggleSiteBtn, settings.includeSiteName],
-							[adguardLogoToggleBtn, settings.showAdguardLogo],
+							[shieldIconToggleBtn, settings.showShieldIcon],
 							[observeDomBtn, settings.observeDomChanges],
 							[shadowDomBtn, settings.shadowDomSupport],
 							[selectorHintsBtn, settings.selectorHintMode],

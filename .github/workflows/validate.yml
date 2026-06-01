@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - dev/feature-upgrades
+      - stable
   pull_request:
 
 jobs:
