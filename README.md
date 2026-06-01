@@ -17,6 +17,7 @@ MES helps you build and manage element-blocking rules directly from a mobile bro
 - Dynamic page monitoring that reapplies rules to later DOM and Shadow DOM changes
 - Preview/restore flow plus display, visibility, and opacity hiding strategies
 - Element inspector for HTML, computed CSS, script hints, page source, cookies, resources, and diagnostics
+- Temporary focus mode that isolates the selected element and its visible scope for inspection
 - Privacy mode that masks cookies and redacts sensitive resource URLs by default
 - Cookie copy/edit/delete controls for browser-visible cookies, with privacy confirmation on raw value copy
 - URL and arbitrary attribute extraction helpers with sensitive-value confirmation
