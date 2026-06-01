@@ -204,9 +204,15 @@ async function runMainFlow(browser) {
   await page.waitForTimeout(250);
   await page.waitForSelector('#mobile-block-panel.visible.compact-picker', { timeout: 5000 });
   const compactSliderBox = await page.locator('#mobile-block-panel.compact-picker #blocker-slider').boundingBox();
-  if (!compactSliderBox || compactSliderBox.width < 80 || compactSliderBox.height < 2) {
+  if (!compactSliderBox || compactSliderBox.width < 80 || compactSliderBox.height < 24) {
     throw new Error(`compact navigation slider is not usable: ${JSON.stringify(compactSliderBox)}`);
   }
+  const compactMoreVisible = await page.locator('#mobile-block-panel.compact-picker #blocker-more').evaluate(button => {
+    const style = getComputedStyle(button);
+    const rect = button.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width >= 28 && rect.height >= 26;
+  });
+  if (!compactMoreVisible) throw new Error('compact picker should keep the more action reachable');
   const navMax = await page.locator('#blocker-slider').evaluate(slider => Number(slider.max));
   if (navMax < 2) throw new Error(`navigation slider did not include descendant candidates: max=${navMax}`);
   await page.locator('#blocker-parent').click();
@@ -267,8 +273,15 @@ async function runResponsiveClippingFlow(browser) {
     </body>
   </html>`;
 
-  for (const width of [320, 360, 390]) {
-    const { context, page } = await openMesPage(browser, html, { compactPickerMode: true }, {}, { width, height: 844 });
+  for (const viewport of [
+    { width: 320, height: 844 },
+    { width: 360, height: 844 },
+    { width: 390, height: 844 },
+    { width: 768, height: 1024 },
+    { width: 1024, height: 768 }
+  ]) {
+    const { width, height } = viewport;
+    const { context, page } = await openMesPage(browser, html, { compactPickerMode: true }, {}, { width, height });
     await page.locator('#mobile-block-toggleBtn').click();
     await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
     await assertNoClippedText(page, '#mobile-block-panel .mb-btn, #mobile-block-panel .btn-label', `main panel ${width}px`);
@@ -286,6 +299,11 @@ async function runResponsiveClippingFlow(browser) {
 
     await page.locator('#blocker-settings').click();
     await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+    const settingsPanelBox = await page.locator('#mobile-settings-panel').boundingBox();
+    const launcherBox = await page.locator('.launcher-mode-grid').boundingBox();
+    if (!settingsPanelBox || !launcherBox || launcherBox.y < settingsPanelBox.y || launcherBox.y > settingsPanelBox.y + settingsPanelBox.height - 44) {
+      throw new Error(`launcher mode controls are not visible near the top at ${width}px: ${JSON.stringify({ settingsPanelBox, launcherBox })}`);
+    }
     await page.locator('[data-launcher-mode="gesture"]').click();
     await page.waitForFunction(() => document.querySelector('#gesture-detail-settings')?.classList.contains('visible'), null, { timeout: 5000 });
     await assertNoClippedText(page, '#mobile-settings-panel .mb-btn', `settings controls ${width}px`);
@@ -404,6 +422,9 @@ async function runBlockingGuardFlow(browser) {
     <body>
       <section class="guard-ad">Stylesheet guarded target</section>
       <section class="inline-guard">Inline guarded target</section>
+      <section class="class-watch">Class attribute target</section>
+      <section class="id-watch">Id attribute target</section>
+      <section class="hidden-watch hidden-ad" hidden>Hidden attribute target</section>
     </body>
   </html>`;
 
@@ -429,7 +450,7 @@ async function runBlockingGuardFlow(browser) {
     browser,
     html,
     { observeDomChanges: true, hideStrategy: 'display' },
-    { mobileBlockedSelectors_v2: ['mes.test##.inline-guard'] }
+    { mobileBlockedSelectors_v2: ['mes.test##.inline-guard', 'mes.test##.dynamic-class-ad', 'mes.test###dynamic-id-ad', 'mes.test##.hidden-ad:not([hidden])'] }
   );
   await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display === 'none', null, { timeout: 5000 });
   await inlinePage.evaluate(() => {
@@ -437,6 +458,16 @@ async function runBlockingGuardFlow(browser) {
   });
   await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display !== 'none', null, { timeout: 5000 });
   await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.inline-guard')).display === 'none', null, { timeout: 5000 });
+  await inlinePage.evaluate(() => {
+    document.querySelector('.class-watch').classList.add('dynamic-class-ad');
+    document.querySelector('.id-watch').id = 'dynamic-id-ad';
+  });
+  await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.dynamic-class-ad')).display === 'none', null, { timeout: 5000 });
+  await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('#dynamic-id-ad')).display === 'none', null, { timeout: 5000 });
+  await inlinePage.evaluate(() => {
+    document.querySelector('.hidden-watch').removeAttribute('hidden');
+  });
+  await inlinePage.waitForFunction(() => getComputedStyle(document.querySelector('.hidden-watch')).display === 'none', null, { timeout: 5000 });
   await inlineContext.close();
 }
 
