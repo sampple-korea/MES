@@ -358,7 +358,7 @@
 			settings.toggleOpacity = DEFAULT_SETTINGS.toggleOpacity;
 		}
 		settings.includeSiteName = typeof settings.includeSiteName === 'boolean' ? settings.includeSiteName : DEFAULT_SETTINGS.includeSiteName;
-		const legacyShieldIconKey = ['show', 'Ad', 'guard', 'Logo'].join('');
+		const legacyShieldIconKey = 'showAdguardLogo';
 		settings.showShieldIcon = typeof settings.showShieldIcon === 'boolean'
 			? settings.showShieldIcon
 			: (typeof settings[legacyShieldIconKey] === 'boolean' ? settings[legacyShieldIconKey] : DEFAULT_SETTINGS.showShieldIcon);
@@ -426,7 +426,7 @@
 	const STYLE_BLOCK_OWNER_ATTR = 'data-mes-style-owner';
 	const STYLE_BLOCK_OWNER_VALUE = 'blocking';
 	const UI_STYLE_ID = 'mes-ui-style';
-	const LEGACY_FILTER_STORAGE_KEY = ['pi', 'cky_blocked_rules'].join('');
+	const PICKY_FILTER_STORAGE_KEY = 'picky_blocked_rules';
 
 	function escapeAttributeValue(value) {
 		return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"').trim();
@@ -780,7 +780,7 @@
 	}
 
 	async function getLegacyImportCandidates() {
-		const store = parseStoredObject(await gmGetValue(LEGACY_FILTER_STORAGE_KEY, null));
+		const store = parseStoredObject(await gmGetValue(PICKY_FILTER_STORAGE_KEY, null));
 		const sourceRules = [];
 		Object.entries(store).forEach(([hostname, selectors]) => {
 			const cleanHost = typeof hostname === 'string' ? hostname.trim() : '';
