@@ -165,6 +165,9 @@
 		blocklistMatches: (count) => `${count}개 매칭`,
 		blocklistNoMatch: '매칭 없음',
 		blocklistDisabledChip: '꺼짐',
+		rulePreviewApplied: (count) => `규칙 영향 ${count}개 표시 중`,
+		rulePreviewUnavailable: '현재 사이트에서 미리보기 불가',
+		clearPreviewAction: '해제',
 		rulesCopied: (count) => `${count}개 규칙 복사됨`,
 		confirmDeleteSiteRules: (hostname, count) => `${hostname}에 저장된 규칙 ${count}개를 삭제할까요?`,
 		siteRulesDeleted: (count) => `현재 사이트 규칙 ${count}개 삭제됨`,
@@ -1239,7 +1242,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 .blocklist-item:hover { background-color: rgba(118,118,128,0.12); border-color: var(--md-sys-color-outline); }
 .blocklist-item.disabled-rule { background-color: rgba(118,118,128,0.05); }
 .blocklist-item.disabled-rule .blocklist-rule-selector { opacity: 0.58; text-decoration: line-through; text-decoration-thickness: 1px; }
-.blocklist-rule { flex: 1; min-width: 0; }
+.blocklist-rule { flex: 1; min-width: 0; border-radius: 9px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.blocklist-rule:active { opacity: 0.72; }
 .blocklist-rule-selector { word-break: break-all; font-size: var(--md-sys-typescale-label-medium-font-size); color: var(--md-sys-color-on-surface-variant); font-family: ui-monospace, SFMono-Regular, 'SF Mono', Consolas, monospace; line-height: 1.35; }
 .blocklist-rule-meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .blocklist-chip { display: inline-flex; align-items: center; min-height: 18px; padding: 1px 6px; border-radius: 999px; background: rgba(118,118,128,0.10); color: var(--md-sys-color-on-surface-variant); font-size: 10px; font-weight: 700; letter-spacing: 0; }
@@ -2019,7 +2023,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		return appliedCount;
 	}
 
-	async function applyBlocking(showToastNotification = false) {
+	async function applyBlocking(showToastNotification = false, ruleOverride = null) {
 		if (settings.tempBlockingDisabled) {
 			console.log(SCRIPT_ID, "Blocking temporarily disabled. Skipping application.");
 			disableAllBlocking(false);
@@ -2042,7 +2046,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			}
 
 			const currentHostname = location.hostname;
-			const activeBlockRules = getActiveBlockRules();
+			const activeBlockRules = Array.isArray(ruleOverride) ? ruleOverride : getActiveBlockRules();
 			if (settings.hideStrategy === 'stylesheet') {
 				const appliedCount = applyStylesheetBlocking(activeBlockRules, currentHostname);
 				console.log(SCRIPT_ID, `Applied ${appliedCount} stylesheet rules.`);
@@ -2453,6 +2457,8 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		let previewedElement = null;
 		let pickerCompact = false;
 		const candidatePreviewElements = new Set();
+		let rulePreviewTimer = null;
+		let rulePreviewActive = false;
 
 		function setPickerCompact(compact) {
 			pickerCompact = !!compact;
@@ -2500,7 +2506,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		function removeSelectionHighlight() {
 			clearIsolation();
-			clearCandidatePreview();
+			void clearRulePreview(true);
 			if (selectedEl) {
 				clearSelectionHighlight(selectedEl);
 			}
@@ -2513,7 +2519,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 		}
 
 		function resetPreview() {
-			clearCandidatePreview();
+			void clearRulePreview(true);
 			if (isPreviewHidden && previewedElement) {
 				try {
 					restoreHiddenElement(previewedElement);
@@ -2544,6 +2550,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 			candidatePreviewElements.clear();
 		}
 
+		async function clearRulePreview(reapply = true) {
+			if (rulePreviewTimer) {
+				clearTimeout(rulePreviewTimer);
+				rulePreviewTimer = null;
+			}
+			const wasActive = rulePreviewActive;
+			rulePreviewActive = false;
+			clearCandidatePreview();
+			if (wasActive && reapply) {
+				await applyBlocking(false);
+			}
+		}
+
 		function previewSelectorCandidate(selector) {
 			clearCandidatePreview();
 			if (!selector) return 0;
@@ -2552,6 +2571,38 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 				ensureElementHighlightStyle(el);
 				el.classList.add(CANDIDATE_PREVIEW_CLASS);
 				candidatePreviewElements.add(el);
+			});
+			return matches.length;
+		}
+
+		async function previewSavedRule(rule) {
+			const parts = getRuleParts(rule);
+			if (!parts?.selector || !ruleAppliesToHost(rule)) {
+				showToast(STRINGS.rulePreviewUnavailable, 'info', 1800);
+				return 0;
+			}
+			await clearRulePreview(false);
+			await loadDisabledSelectors();
+			const activeRulesWithoutPreview = getActiveBlockRules().filter(activeRule => activeRule !== rule);
+			rulePreviewActive = true;
+			await applyBlocking(false, activeRulesWithoutPreview);
+			const matches = querySelectorAllEverywhere(parts.selector).filter(el => el && !el.closest?.('.mobile-block-ui'));
+			matches.slice(0, 80).forEach(el => {
+				ensureElementHighlightStyle(el);
+				el.classList.add(CANDIDATE_PREVIEW_CLASS);
+				candidatePreviewElements.add(el);
+			});
+			if (!matches.length) {
+				await clearRulePreview(true);
+				showToast(STRINGS.blocklistNoMatch, 'info', 1800);
+				return 0;
+			}
+			rulePreviewTimer = setTimeout(() => {
+				clearRulePreview(true);
+			}, 4500);
+			showToast(STRINGS.rulePreviewApplied(matches.length), 'info', 4500, {
+				label: STRINGS.clearPreviewAction,
+				onClick: () => clearRulePreview(true)
 			});
 			return matches.length;
 		}
@@ -2891,6 +2942,19 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 						const ruleBlock = document.createElement('div');
 						ruleBlock.className = 'blocklist-rule';
 						ruleBlock.title = rule;
+						ruleBlock.role = 'button';
+						ruleBlock.tabIndex = 0;
+						ruleBlock.setAttribute('aria-label', `${STRINGS.preview} ${rule}`);
+						const handleRulePreview = () => {
+							previewSavedRule(rule);
+						};
+						ruleBlock.addEventListener('click', handleRulePreview);
+						ruleBlock.addEventListener('keydown', event => {
+							if (event.key === 'Enter' || event.key === ' ') {
+								event.preventDefault();
+								handleRulePreview();
+							}
+						});
 
 						const selectorText = document.createElement('div');
 						selectorText.className = 'blocklist-rule-selector';
@@ -3691,6 +3755,7 @@ label[for="blocker-slider"] { display: block; font-size: var(--md-sys-typescale-
 
 		listClose.addEventListener('click', () => {
 			console.log('[listClose] Clicked');
+			void clearRulePreview(true);
 			setPanelVisibility(listPanel, false);
 			if (selecting) {
 				console.log('[listClose] Restoring main panel');
