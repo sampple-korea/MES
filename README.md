@@ -34,6 +34,26 @@ MES 2.0.0은 1.x 계열에서 UI, 선택자 품질, 규칙 관리, 동적 감시
 - 기존 필터 데이터가 감지될 때만 표시되는 마이그레이션 메뉴
 - 낮은 대비의 작은 원형 런처와 선택형 방패 아이콘
 
+## 기능 캡처
+
+아래 이미지는 Playwright로 실제 MES UI를 실행해 캡처한 화면입니다.
+
+| 작은 런처 | 전체 선택 패널 |
+| --- | --- |
+| <img src="docs/assets/feature-launcher-button.png" width="320" alt="작은 원형 런처"> | <img src="docs/assets/feature-expanded-picker.png" width="320" alt="전체 선택 패널"> |
+
+| 컴팩트 선택 모드 | 선택자 후보와 위험도 |
+| --- | --- |
+| <img src="docs/assets/feature-compact-selector.png" width="320" alt="컴팩트 선택 모드"> | <img src="docs/assets/feature-selector-candidates.png" width="320" alt="선택자 후보와 위험도"> |
+
+| 저장 규칙 관리 | 설정 개요 |
+| --- | --- |
+| <img src="docs/assets/feature-rule-management.png" width="320" alt="저장 규칙 관리"> | <img src="docs/assets/feature-settings-overview.png" width="320" alt="설정 개요"> |
+
+| 제스처 런처 설정 | 태블릿 레이아웃 |
+| --- | --- |
+| <img src="docs/assets/feature-gesture-settings.png" width="320" alt="제스처 런처 설정"> | <img src="docs/assets/feature-tablet-layout.png" width="320" alt="태블릿 레이아웃"> |
+
 ## 설치
 
 Tampermonkey, Violentmonkey 같은 userscript 매니저를 설치한 뒤 아래 주소를 열어 설치하세요.
