@@ -184,8 +184,8 @@ async function runMainFlow(browser) {
   await page.locator('#blocker-settings').click();
   await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
 
-  const importHiddenWithoutSource = await page.locator('#settings-legacy-import-item').evaluate(el => el.hidden);
-  if (!importHiddenWithoutSource) throw new Error('legacy import menu should stay hidden without source data');
+  const removedImportControls = await page.locator('#settings-legacy-import-item, #settings-legacy-import').count();
+  if (removedImportControls) throw new Error('separate import controls should not be rendered');
 
   const lowPowerNotice = await page.locator('#settings-low-power-note').innerText();
   if (!lowPowerNotice.includes('차단 성능')) throw new Error(`low power warning was not shown: ${lowPowerNotice}`);
@@ -198,6 +198,8 @@ async function runMainFlow(browser) {
   if (!gestureDetailHidden) throw new Error('gesture details should be hidden in button launcher mode');
   await page.locator('[data-launcher-mode="gesture"]').click();
   await page.waitForFunction(() => document.querySelector('#gesture-detail-settings')?.classList.contains('visible'), null, { timeout: 5000 });
+  const togglePositionHidden = await page.locator('#settings-toggle-position-item').evaluate(el => el.hidden);
+  if (!togglePositionHidden) throw new Error('toggle position controls should be hidden in gesture launcher mode');
   await page.locator('[data-gesture-fingers="3"]').click();
   await page.locator('[data-gesture-taps="3"]').click();
   const gestureSettings = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileElementSelectorSettings_v1_2')));
@@ -1194,7 +1196,7 @@ async function runBlockingGuardFlow(browser) {
   await shadowContext.close();
 }
 
-async function runLegacyImportFlow(browser) {
+async function runCompatibleRestoreFlow(browser) {
   const html = `<!doctype html>
   <html>
     <head>
@@ -1213,13 +1215,8 @@ async function runLegacyImportFlow(browser) {
     </body>
   </html>`;
 
-  const pickyLegacyKey = 'picky_blocked_rules';
   const { context, page } = await openMesPage(browser, html, { compactPickerMode: true }, {
-    [pickyLegacyKey]: {
-      'mes.test': ['.legacy-ad', '.legacy-ad'],
-      'other.example': ['.global-ad']
-    },
-    mobileBlockedSelectors_v2: ['other.example##.global-ad', 'mes.test##.stale-ad']
+    mobileBlockedSelectors_v2: ['mes.test##.old-rule']
   });
   page.on('dialog', dialog => dialog.accept());
 
@@ -1231,27 +1228,37 @@ async function runLegacyImportFlow(browser) {
   await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
   await page.locator('#blocker-settings').click();
   await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+  const removedImportControls = await page.locator('#settings-legacy-import-item, #settings-legacy-import').count();
+  if (removedImportControls) throw new Error('separate import controls should not be rendered in restore flow');
+
+  const compatibleRestorePayload = {
+    'mes.test': ['.legacy-ad', '.legacy-ad'],
+    'other.example': ['.global-ad'],
+    'bad host': ['.bad-ad'],
+    'empty.example': ['']
+  };
+  await page.locator('#settings-restore-input').setInputFiles({
+    name: 'compatible-rules.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(compatibleRestorePayload, null, 2))
+  });
   await page.waitForFunction(() => {
-    const item = document.querySelector('#settings-legacy-import-item');
-    return item && !item.hidden;
+    const rules = JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2') || '[]');
+    return rules.includes('mes.test##.legacy-ad') &&
+      rules.includes('other.example##.global-ad') &&
+      !rules.includes('mes.test##.old-rule') &&
+      rules.length === 2;
   }, null, { timeout: 5000 });
 
-  const summary = await page.locator('#legacy-import-summary').innerText();
-  if (!summary.includes('새 규칙 1개')) throw new Error(`legacy import summary mismatch: ${summary}`);
-  await page.locator('#settings-legacy-import').click();
-  await page.waitForTimeout(500);
-
   const importedRules = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2')));
-  if (!importedRules.includes('mes.test##.legacy-ad') || !importedRules.includes('other.example##.global-ad') || !importedRules.includes('mes.test##.stale-ad')) {
-    throw new Error(`legacy rule was not imported: ${JSON.stringify(importedRules)}`);
+  if (!importedRules.includes('mes.test##.legacy-ad') || !importedRules.includes('other.example##.global-ad')) {
+    throw new Error(`compatible restore rules were not imported: ${JSON.stringify(importedRules)}`);
   }
   if (importedRules.filter(rule => rule === 'other.example##.global-ad').length !== 1) {
-    throw new Error(`pre-existing rule was duplicated: ${JSON.stringify(importedRules)}`);
+    throw new Error(`compatible restore duplicated a rule: ${JSON.stringify(importedRules)}`);
   }
   const hidden = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display === 'none');
-  if (!hidden) throw new Error('imported legacy rule was not applied');
-  const importDisabled = await page.locator('#settings-legacy-import').evaluate(button => button.disabled);
-  if (!importDisabled) throw new Error('legacy import button should be disabled after importing all rules');
+  if (!hidden) throw new Error('compatible restore rule was not applied');
   await page.locator('#settings-close').click();
   await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
   const secondaryVisible = await page.locator('#blocker-secondary-actions').evaluate(el => el.classList.contains('visible'));
@@ -1266,10 +1273,6 @@ async function runLegacyImportFlow(browser) {
   if (!otherRow.includes('다른 사이트')) {
     throw new Error(`other-site rule scope chip missing: ${otherRow}`);
   }
-  const staleRow = await page.locator('.blocklist-item').filter({ hasText: '.stale-ad' }).innerText();
-  if (!staleRow.includes('매칭 없음')) {
-    throw new Error(`stale rule chip missing: ${staleRow}`);
-  }
   await page.locator('.blocklist-item').filter({ hasText: '.legacy-ad' }).locator('.blocklist-rule').click();
   await page.locator('.mes-toast-action', { hasText: '해제' }).last().waitFor({ timeout: 5000 });
   await page.waitForFunction(() => {
@@ -1280,12 +1283,98 @@ async function runLegacyImportFlow(browser) {
   await page.waitForTimeout(350);
   const previewCleared = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display === 'none' && !el.classList.contains('mes-selector-candidate-match'));
   if (!previewCleared) throw new Error('saved rule preview did not restore blocking after clearing');
-  await page.locator('#blocklist-prune-stale').click();
+
+  await context.close();
+}
+
+async function restoreJsonFile(page, name, payload) {
+  await page.locator('#settings-restore-input').setInputFiles({
+    name,
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify(payload, null, 2))
+  });
+}
+
+async function runRestoreFormatCompatibilityFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        .array-ad, .backup-ad, .wrapped-ad, .bad-ad { min-height: 76px; padding: 18px; border-radius: 12px; background: #fff2d8; }
+      </style>
+    </head>
+    <body>
+      <main>
+        <section class="array-ad">Array rule target</section>
+        <section class="backup-ad">Backup rule target</section>
+        <section class="wrapped-ad">Wrapped rule target</section>
+        <section class="bad-ad">Malformed restore target</section>
+      </main>
+    </body>
+  </html>`;
+
+  const { context, page } = await openMesPage(browser, html, { compactPickerMode: true, hideStrategy: 'stylesheet' });
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#mobile-block-toggleBtn').click();
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  await page.locator('#blocker-more').click();
+  await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+  await page.locator('#blocker-settings').click();
+  await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+
+  await restoreJsonFile(page, 'array-rules.json', ['mes.test##.array-ad']);
+  await page.waitForFunction(() => {
+    const rules = JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2') || '[]');
+    return rules.length === 1 && rules.includes('mes.test##.array-ad');
+  }, null, { timeout: 5000 });
+  const arrayHidden = await page.locator('.array-ad').evaluate(el => getComputedStyle(el).display === 'none');
+  if (!arrayHidden) throw new Error('array restore rule was not applied');
+
+  await restoreJsonFile(page, 'mes-backup.json', {
+    version: '2.2.2',
+    settings: { hideStrategy: 'visibility', lowPowerMode: true },
+    rules: ['mes.test##.backup-ad', 'other.example##.foreign-ad'],
+    disabledRules: ['other.example##.foreign-ad', 'mes.test##.missing-ad']
+  });
+  await page.waitForFunction(() => {
+    const rules = JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2') || '[]');
+    const disabled = JSON.parse(localStorage.getItem('mobileDisabledSelectors_v1') || '[]');
+    const settings = JSON.parse(localStorage.getItem('mobileElementSelectorSettings_v1_2') || '{}');
+    return rules.includes('mes.test##.backup-ad') &&
+      rules.includes('other.example##.foreign-ad') &&
+      disabled.length === 1 &&
+      disabled.includes('other.example##.foreign-ad') &&
+      settings.hideStrategy === 'visibility' &&
+      settings.lowPowerMode === true;
+  }, null, { timeout: 5000 });
+  const backupHiddenByVisibility = await page.locator('.backup-ad').evaluate(el => getComputedStyle(el).visibility === 'hidden');
+  if (!backupHiddenByVisibility) throw new Error('MES backup restore did not apply settings/rules');
+
+  await restoreJsonFile(page, 'wrapped-picky-rules.json', {
+    picky_blocked_rules: {
+      'mes.test': ['.wrapped-ad']
+    }
+  });
+  await page.waitForFunction(() => {
+    const rules = JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2') || '[]');
+    return rules.length === 1 && rules.includes('mes.test##.wrapped-ad');
+  }, null, { timeout: 5000 });
+  const wrappedHidden = await page.locator('.wrapped-ad').evaluate(el => getComputedStyle(el).visibility === 'hidden');
+  if (!wrappedHidden) throw new Error('wrapped Picky restore rule was not applied');
+
+  await restoreJsonFile(page, 'malformed-mes-like.json', {
+    disabledRules: ['mes.test##.bad-ad']
+  });
   await page.waitForTimeout(500);
-  const prunedRules = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2')));
-  if (prunedRules.includes('mes.test##.stale-ad') || !prunedRules.includes('mes.test##.legacy-ad') || !prunedRules.includes('other.example##.global-ad')) {
-    throw new Error(`stale cleanup removed wrong rules: ${JSON.stringify(prunedRules)}`);
+  const rulesAfterMalformed = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileBlockedSelectors_v2') || '[]'));
+  if (rulesAfterMalformed.length !== 1 || !rulesAfterMalformed.includes('mes.test##.wrapped-ad')) {
+    throw new Error(`malformed restore should not be accepted: ${JSON.stringify(rulesAfterMalformed)}`);
   }
+  const badVisible = await page.locator('.bad-ad').evaluate(el => getComputedStyle(el).visibility !== 'hidden' && getComputedStyle(el).display !== 'none');
+  if (!badVisible) throw new Error('malformed MES-like object was treated as a site-rule map');
 
   await context.close();
 }
@@ -1495,7 +1584,8 @@ async function run() {
     await runResponsiveClippingFlow(browser);
     await runAdvancedFlow(browser);
     await runBlockingGuardFlow(browser);
-    await runLegacyImportFlow(browser);
+    await runCompatibleRestoreFlow(browser);
+    await runRestoreFormatCompatibilityFlow(browser);
     await runSelectorCandidateFlow(browser);
     await runLexicalGmStorageFlow(browser);
     await runLocalFallbackMigrationFlow(browser);

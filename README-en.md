@@ -13,6 +13,7 @@ MES is an advanced userscript for selecting and hiding web page elements on mobi
 - Selector quality, risk, match count, preview, and save confirmation
 - Precise, similar-pattern, attribute, class, resource, and advanced ad-pattern selector candidates
 - Saved rule search, copy, enable/disable, current-site cleanup, backup, and restore
+- Rule restore supports Picky site-rule JSON
 - Open Shadow DOM selection and host-scoped rules
 - Dynamic page reapplication with optional low-power mode
 - Blocking integrity protection when a page modifies hiding styles or rule stylesheets
@@ -39,6 +40,10 @@ The same GitHub URL is used for updates.
 4. Adjust the parent/child range and preview the result.
 5. Save the selector rule.
 6. Manage saved rules from the list and settings panels.
+
+## Migrating From Picky
+
+MES `Settings` > `Restore rules (JSON)` also accepts Picky site-rule JSON. Export or copy the rule JSON from Picky, save it as a `.json` file, then select that file from MES restore.
 
 ## Settings
 
