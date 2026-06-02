@@ -562,8 +562,20 @@ async function runUiFrontGuardFlow(browser) {
   await page.evaluate(() => {
     const button = document.querySelector('#mobile-block-toggleBtn');
     const rect = button.getBoundingClientRect();
+    const host = document.createElement('div');
+    host.id = 'external-root-host';
+    Object.assign(host.style, {
+      all: 'initial',
+      position: 'fixed',
+      top: '0',
+      left: '0',
+      width: '0',
+      height: '0',
+      zIndex: '2147483647',
+      pointerEvents: 'none'
+    });
     const blocker = document.createElement('button');
-    blocker.id = 'external-top-overlay';
+    blocker.id = 'external-root-overlay';
     blocker.textContent = 'external';
     Object.assign(blocker.style, {
       position: 'fixed',
@@ -573,9 +585,11 @@ async function runUiFrontGuardFlow(browser) {
       height: `${rect.height + 12}px`,
       zIndex: '2147483647',
       border: '0',
+      pointerEvents: 'auto',
       background: 'rgba(255,0,0,0.2)'
     });
-    document.body.appendChild(blocker);
+    host.appendChild(blocker);
+    document.documentElement.appendChild(host);
   });
   await page.waitForFunction(() => {
     const button = document.querySelector('#mobile-block-toggleBtn');
@@ -584,7 +598,20 @@ async function runUiFrontGuardFlow(browser) {
     const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
     return hit === button || button.contains(hit);
   }, null, { timeout: 5000 });
-  const trailingOrder = await page.evaluate(() => Array.from(document.body.children).slice(-7).map(node => node.id));
+  await page.waitForFunction(() => {
+    const root = Array.from(document.querySelectorAll('#mes-ui-root'))
+      .find(node => node.getAttribute('data-mes-owner') === 'ui-root');
+    return root && document.documentElement.lastElementChild === root;
+  }, null, { timeout: 5000 });
+  const hostState = await page.evaluate(() => {
+    const root = Array.from(document.querySelectorAll('#mes-ui-root'))
+      .find(node => node.getAttribute('data-mes-owner') === 'ui-root');
+    return {
+      rootIsDocumentTop: document.documentElement.lastElementChild === root,
+      rootPointerEvents: root ? getComputedStyle(root).pointerEvents : '',
+      rootChildren: root ? Array.from(root.children).map(node => node.id) : []
+    };
+  });
   const expectedOrder = [
     'mes-selection-capture-layer',
     'mobile-block-panel',
@@ -594,11 +621,268 @@ async function runUiFrontGuardFlow(browser) {
     'mobile-block-toggleBtn',
     'mes-toast-container'
   ];
-  if (trailingOrder.join('|') !== expectedOrder.join('|')) {
-    throw new Error(`MES UI does not own the trailing stack: ${trailingOrder.join(', ')}`);
+  if (!hostState.rootIsDocumentTop) {
+    throw new Error('MES UI root does not own the documentElement top slot');
+  }
+  if (hostState.rootPointerEvents !== 'none') {
+    throw new Error(`MES UI root should not block page hit testing outside children: ${hostState.rootPointerEvents}`);
+  }
+  if (hostState.rootChildren.join('|') !== expectedOrder.join('|')) {
+    throw new Error(`MES UI root child order is wrong: ${hostState.rootChildren.join(', ')}`);
+  }
+  await page.evaluate(() => {
+    const hostileStyle = document.createElement('style');
+    hostileStyle.id = 'external-hide-mes-style';
+    hostileStyle.textContent = `
+      #mes-ui-root { display: none !important; z-index: 1 !important; visibility: hidden !important; }
+      html > #mes-ui-root[data-mes-owner="ui-root"] #mobile-block-toggleBtn {
+        display: none !important;
+        visibility: hidden !important;
+        z-index: 1 !important;
+        pointer-events: none !important;
+      }
+    `;
+    document.head.appendChild(hostileStyle);
+  });
+  await page.waitForFunction(() => {
+    const root = document.querySelector('#mes-ui-root');
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    if (!root) return false;
+    const computed = getComputedStyle(root);
+    const buttonComputed = button ? getComputedStyle(button) : null;
+    return computed.display !== 'none' &&
+      computed.visibility === 'visible' &&
+      computed.zIndex === '2147483647' &&
+      buttonComputed &&
+      buttonComputed.display !== 'none' &&
+      buttonComputed.visibility === 'visible' &&
+      buttonComputed.zIndex === '2147483647' &&
+      buttonComputed.pointerEvents !== 'none' &&
+      document.head.lastElementChild?.id === 'mes-ui-style';
+  }, null, { timeout: 5000 });
+  await page.evaluate(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    const rect = button.getBoundingClientRect();
+    const dialog = document.createElement('dialog');
+    dialog.id = 'external-modeless-dialog';
+    dialog.textContent = 'modeless';
+    Object.assign(dialog.style, {
+      position: 'fixed',
+      left: `${rect.left - 8}px`,
+      top: `${rect.top - 8}px`,
+      width: `${rect.width + 16}px`,
+      height: `${rect.height + 16}px`,
+      margin: '0',
+      padding: '0',
+      border: '0',
+      zIndex: '2147483647',
+      background: 'rgba(255,128,0,0.22)'
+    });
+    document.body.appendChild(dialog);
+    if (typeof dialog.show === 'function') {
+      dialog.show();
+    } else {
+      dialog.setAttribute('open', '');
+    }
+  });
+  await page.waitForFunction(() => {
+    const root = document.querySelector('#mes-ui-root');
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    if (!root || !button) return false;
+    let rootModal = false;
+    try {
+      rootModal = root.matches(':modal');
+    } catch (e) {}
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return !rootModal && (hit === button || button.contains(hit));
+  }, null, { timeout: 5000 });
+  await page.evaluate(() => document.querySelector('#external-modeless-dialog')?.remove());
+  await page.evaluate(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    const rect = button.getBoundingClientRect();
+    const popover = document.createElement('button');
+    popover.id = 'external-top-layer-popover';
+    popover.setAttribute('popover', 'manual');
+    popover.textContent = 'popover';
+    Object.assign(popover.style, {
+      position: 'fixed',
+      left: `${rect.left - 8}px`,
+      top: `${rect.top - 8}px`,
+      width: `${rect.width + 16}px`,
+      height: `${rect.height + 16}px`,
+      margin: '0',
+      padding: '0',
+      border: '0',
+      background: 'rgba(0,255,128,0.22)'
+    });
+    document.body.appendChild(popover);
+    if (typeof popover.showPopover === 'function') {
+      popover.showPopover();
+    }
+  });
+  await page.waitForFunction(() => {
+    const root = document.querySelector('#mes-ui-root');
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    if (!root || !button) return false;
+    let rootModal = false;
+    try {
+      rootModal = root.matches(':modal');
+    } catch (e) {}
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return !rootModal && (hit === button || button.contains(hit));
+  }, null, { timeout: 5000 });
+  await page.evaluate(() => document.querySelector('#external-top-layer-popover')?.hidePopover?.());
+  await page.evaluate(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    const rect = button.getBoundingClientRect();
+    const dialog = document.createElement('dialog');
+    dialog.id = 'external-top-layer-dialog';
+    dialog.textContent = 'dialog';
+    Object.assign(dialog.style, {
+      position: 'fixed',
+      left: `${rect.left - 8}px`,
+      top: `${rect.top - 8}px`,
+      width: `${rect.width + 16}px`,
+      height: `${rect.height + 16}px`,
+      margin: '0',
+      padding: '0',
+      border: '0',
+      background: 'rgba(0,0,255,0.22)'
+    });
+    document.body.appendChild(dialog);
+    if (typeof dialog.showModal === 'function') {
+      dialog.showModal();
+    } else {
+      dialog.setAttribute('open', '');
+    }
+  });
+  await page.waitForFunction(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    if (!button) return false;
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return hit === button || button.contains(hit);
+  }, null, { timeout: 5000 });
+  await page.evaluate(() => document.querySelector('#external-top-layer-dialog')?.close?.());
+  await page.evaluate(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    const rect = button.getBoundingClientRect();
+    const host = document.createElement('div');
+    host.id = 'external-shadow-modal-host';
+    document.body.appendChild(host);
+    const shadow = host.attachShadow({ mode: 'open' });
+    const dialog = document.createElement('dialog');
+    dialog.id = 'external-shadow-dialog';
+    dialog.textContent = 'shadow-dialog';
+    Object.assign(dialog.style, {
+      position: 'fixed',
+      left: `${rect.left - 8}px`,
+      top: `${rect.top - 8}px`,
+      width: `${rect.width + 16}px`,
+      height: `${rect.height + 16}px`,
+      margin: '0',
+      padding: '0',
+      border: '0',
+      background: 'rgba(128,0,255,0.22)'
+    });
+    shadow.appendChild(dialog);
+    if (typeof dialog.showModal === 'function') {
+      dialog.showModal();
+    } else {
+      dialog.setAttribute('open', '');
+    }
+  });
+  await page.waitForFunction(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    if (!button) return false;
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return hit === button || button.contains(hit);
+  }, null, { timeout: 5000 });
+  await page.evaluate(() => document.querySelector('#external-shadow-modal-host')?.shadowRoot?.querySelector('dialog')?.close?.());
+  await page.evaluate(() => {
+    const root = document.querySelector('#mes-ui-root');
+    root.style.setProperty('display', 'none', 'important');
+    root.style.setProperty('z-index', '1', 'important');
+    root.hidden = true;
+    root.setAttribute('aria-hidden', 'true');
+    root.setAttribute('inert', '');
+  });
+  await page.waitForFunction(() => {
+    const root = document.querySelector('#mes-ui-root');
+    if (!root) return false;
+    const computed = getComputedStyle(root);
+    return !root.hidden &&
+      !root.hasAttribute('aria-hidden') &&
+      !root.hasAttribute('inert') &&
+      computed.display !== 'none' &&
+      computed.zIndex === '2147483647';
+  }, null, { timeout: 5000 });
+  await page.evaluate(() => {
+    document.querySelector('#mes-ui-root')?.remove();
+  });
+  await page.waitForFunction(() => {
+    const root = document.querySelector('#mes-ui-root');
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    return root &&
+      button &&
+      root.contains(button) &&
+      document.documentElement.lastElementChild === root &&
+      getComputedStyle(button).visibility === 'visible';
+  }, null, { timeout: 5000 });
+  const recoveredHit = await page.evaluate(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return hit === button || button.contains(hit);
+  });
+  if (!recoveredHit) {
+    throw new Error('MES UI did not recover front hit testing after root removal');
   }
   await context.close();
   if (pageErrors.length) throw new Error(`ui front guard flow page errors: ${pageErrors.join('\\n')}`);
+}
+
+async function runUiRootCollisionFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>body { margin: 0; min-height: 100vh; }</style>
+    </head>
+    <body>
+      <div id="mes-ui-root" data-page-owned="true">Page-owned element</div>
+      <main>Collision target</main>
+    </body>
+  </html>`;
+
+  const { context, page, pageErrors } = await openMesPage(browser, html, {});
+  const collisionState = await page.evaluate(() => {
+    const roots = Array.from(document.querySelectorAll('#mes-ui-root'));
+    const pageOwned = roots.find(node => node.getAttribute('data-page-owned') === 'true');
+    const mesOwned = roots.find(node => node.getAttribute('data-mes-owner') === 'ui-root');
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    return {
+      count: roots.length,
+      pageOwnedParent: pageOwned?.parentNode?.tagName || '',
+      pageOwnedText: pageOwned?.textContent || '',
+      mesOwnedParent: mesOwned?.parentNode?.tagName || '',
+      mesOwnedIsTop: document.documentElement.lastElementChild === mesOwned,
+      buttonInsideMesRoot: !!(mesOwned && button && mesOwned.contains(button))
+    };
+  });
+  if (collisionState.count < 2 ||
+    collisionState.pageOwnedParent !== 'BODY' ||
+    !collisionState.pageOwnedText.includes('Page-owned element') ||
+    collisionState.mesOwnedParent !== 'HTML' ||
+    !collisionState.mesOwnedIsTop ||
+    !collisionState.buttonInsideMesRoot) {
+    throw new Error(`MES root collision handling failed: ${JSON.stringify(collisionState)}`);
+  }
+  await context.close();
+  if (pageErrors.length) throw new Error(`ui root collision flow page errors: ${pageErrors.join('\\n')}`);
 }
 
 async function runResponsiveClippingFlow(browser) {
@@ -988,8 +1272,10 @@ async function runLegacyImportFlow(browser) {
   }
   await page.locator('.blocklist-item').filter({ hasText: '.legacy-ad' }).locator('.blocklist-rule').click();
   await page.locator('.mes-toast-action', { hasText: '해제' }).last().waitFor({ timeout: 5000 });
-  const previewVisible = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display !== 'none' && el.classList.contains('mes-selector-candidate-match'));
-  if (!previewVisible) throw new Error('saved rule preview did not reveal and mark matching elements');
+  await page.waitForFunction(() => {
+    const el = document.querySelector('.legacy-ad');
+    return el && getComputedStyle(el).display !== 'none' && el.classList.contains('mes-selector-candidate-match');
+  }, null, { timeout: 5000 });
   await page.locator('.mes-toast-action', { hasText: '해제' }).last().click();
   await page.waitForTimeout(350);
   const previewCleared = await page.locator('.legacy-ad').evaluate(el => getComputedStyle(el).display === 'none' && !el.classList.contains('mes-selector-candidate-match'));
@@ -1205,6 +1491,7 @@ async function run() {
     await runSelectionCaptureFlow(browser);
     await runFrameWorkerFlow(browser);
     await runUiFrontGuardFlow(browser);
+    await runUiRootCollisionFlow(browser);
     await runResponsiveClippingFlow(browser);
     await runAdvancedFlow(browser);
     await runBlockingGuardFlow(browser);
