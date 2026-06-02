@@ -429,6 +429,70 @@ async function runSelectionCaptureFlow(browser) {
   if (pageErrors.length) throw new Error(`selection capture flow page errors: ${pageErrors.join('\\n')}`);
 }
 
+async function runFrameWorkerFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        iframe { width: 100%; height: 220px; border: 1px solid #ddd; border-radius: 12px; background: white; }
+      </style>
+    </head>
+    <body>
+      <main>
+        <section class="content-card">Top content</section>
+        <iframe id="ad-frame" srcdoc='<!doctype html>
+          <html>
+            <head>
+              <style>
+                body { margin: 0; font-family: system-ui, sans-serif; }
+                .frame-ad { min-height: 120px; margin: 18px; padding: 20px; background: #fff2d8; border: 1px solid #ffd48a; }
+                .frame-content { margin: 18px; padding: 20px; background: #fff; }
+              </style>
+            </head>
+            <body>
+              <section class="frame-ad">Frame ad</section>
+              <section class="frame-content">Frame content</section>
+            </body>
+          </html>'></iframe>
+      </main>
+    </body>
+  </html>`;
+
+  const { context, page, pageErrors } = await openMesPage(browser, html, {
+    hideStrategy: 'stylesheet',
+    observeDomChanges: true
+  });
+  const frame = await page.waitForFunction(() => {
+    const iframe = document.querySelector('#ad-frame');
+    return iframe?.contentWindow?.document?.readyState === 'complete';
+  }, null, { timeout: 5000 }).then(() => page.frames().find(candidate => candidate.parentFrame() === page.mainFrame()));
+  if (!frame) throw new Error('iframe was not available for frame worker test');
+
+  const frameScript = buildLexicalGmScript({
+    mobileElementSelectorSettings_v1_2: JSON.stringify({
+      hideStrategy: 'stylesheet',
+      observeDomChanges: true
+    }),
+    mobileBlockedSelectors_v2: JSON.stringify(['##.frame-ad', '##.late-frame-ad'])
+  });
+  await frame.addScriptTag({ content: frameScript });
+  await frame.waitForFunction(() => !document.querySelector('#mobile-block-toggleBtn') && !document.querySelector('#mobile-block-panel') && !document.querySelector('#mes-ui-style'), null, { timeout: 5000 });
+  await frame.waitForFunction(() => getComputedStyle(document.querySelector('.frame-ad')).display === 'none', null, { timeout: 5000 });
+  await frame.evaluate(() => {
+    const node = document.createElement('section');
+    node.className = 'late-frame-ad';
+    node.textContent = 'Late frame ad';
+    document.body.appendChild(node);
+  });
+  await frame.waitForFunction(() => getComputedStyle(document.querySelector('.late-frame-ad')).display === 'none', null, { timeout: 6000 });
+
+  await context.close();
+  if (pageErrors.length) throw new Error(`frame worker flow page errors: ${pageErrors.join('\\n')}`);
+}
+
 async function runResponsiveClippingFlow(browser) {
   const html = `<!doctype html>
   <html>
@@ -1030,6 +1094,7 @@ async function run() {
     await runMainFlow(browser);
     await runLanguageFlow(browser);
     await runSelectionCaptureFlow(browser);
+    await runFrameWorkerFlow(browser);
     await runResponsiveClippingFlow(browser);
     await runAdvancedFlow(browser);
     await runBlockingGuardFlow(browser);
