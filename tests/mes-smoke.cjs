@@ -273,6 +273,162 @@ async function runMainFlow(browser) {
   await context.close();
 }
 
+async function runLanguageFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        .content-card { padding: 24px; border-radius: 12px; background: white; }
+      </style>
+    </head>
+    <body><main><section class="content-card">Language target</section></main></body>
+  </html>`;
+
+  {
+    const { context, page } = await openMesPage(browser, html, {});
+    await page.locator('#mobile-block-toggleBtn').click();
+    await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+    const defaultPickerLabel = await page.locator('#blocker-info-label').innerText();
+    if (!defaultPickerLabel.includes('선택된 요소')) throw new Error(`default language should be Korean: ${defaultPickerLabel}`);
+    await page.locator('#blocker-more').click();
+    await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+    await page.locator('#blocker-settings').click();
+    await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+    const activeLanguage = await page.locator('.language-option-btn.active').getAttribute('data-ui-language');
+    if (activeLanguage !== 'ko') throw new Error(`default active language should be ko: ${activeLanguage}`);
+    await assertNoClippedText(page, '#mobile-settings-panel .language-option-btn', 'language buttons default');
+    await page.locator('[data-ui-language="en"]').click();
+    await page.waitForFunction(() => JSON.parse(localStorage.getItem('mobileElementSelectorSettings_v1_2') || '{}').uiLanguage === 'en', null, { timeout: 5000 });
+    const savedLanguage = await page.evaluate(() => JSON.parse(localStorage.getItem('mobileElementSelectorSettings_v1_2') || '{}').uiLanguage);
+    if (savedLanguage !== 'en') throw new Error(`language setting was not saved: ${savedLanguage}`);
+    await context.close();
+  }
+
+  {
+    const { context, page } = await openMesPage(browser, html, { uiLanguage: 'invalid-language' });
+    await page.locator('#mobile-block-toggleBtn').click();
+    await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+    const normalizedPickerLabel = await page.locator('#blocker-info-label').innerText();
+    if (!normalizedPickerLabel.includes('선택된 요소')) {
+      throw new Error(`invalid language should normalize to Korean: ${normalizedPickerLabel}`);
+    }
+    await page.locator('#blocker-more').click();
+    await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+    await page.locator('#blocker-settings').click();
+    await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+    const normalizedActiveLanguage = await page.locator('.language-option-btn.active').getAttribute('data-ui-language');
+    if (normalizedActiveLanguage !== 'ko') {
+      throw new Error(`invalid language active button should normalize to ko: ${normalizedActiveLanguage}`);
+    }
+    await context.close();
+  }
+
+  const languageExpectations = [
+    { code: 'en', pickerLabel: 'Selected Element', settingsTitle: 'Settings', note: 'Blocking performance' },
+    { code: 'zh', pickerLabel: '已选元素', settingsTitle: '设置', note: '屏蔽性能' },
+    { code: 'ja', pickerLabel: '選択した要素', settingsTitle: '設定', note: 'ブロック性能' }
+  ];
+
+  for (const expectation of languageExpectations) {
+    const { context, page } = await openMesPage(browser, html, { uiLanguage: expectation.code });
+    await page.locator('#mobile-block-toggleBtn').click();
+    await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+    const pickerLabel = await page.locator('#blocker-info-label').innerText();
+    if (!pickerLabel.includes(expectation.pickerLabel)) {
+      throw new Error(`${expectation.code} picker label mismatch: ${pickerLabel}`);
+    }
+    await page.locator('#blocker-more').click();
+    await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+    await page.locator('#blocker-settings').click();
+    await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+    const settingsTitle = await page.locator('#mobile-settings-panel .mb-panel-title').innerText();
+    if (settingsTitle.trim() !== expectation.settingsTitle) {
+      throw new Error(`${expectation.code} settings title mismatch: ${settingsTitle}`);
+    }
+    const activeLanguage = await page.locator('.language-option-btn.active').getAttribute('data-ui-language');
+    if (activeLanguage !== expectation.code) {
+      throw new Error(`${expectation.code} active language mismatch: ${activeLanguage}`);
+    }
+    const lowPowerNotice = await page.locator('#settings-low-power-note').innerText();
+    if (!lowPowerNotice.includes(expectation.note)) {
+      throw new Error(`${expectation.code} low power notice mismatch: ${lowPowerNotice}`);
+    }
+    await assertNoClippedText(page, '#mobile-settings-panel .mb-btn', `localized settings controls ${expectation.code}`);
+    await context.close();
+  }
+}
+
+async function runSelectionCaptureFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; min-height: 1200px; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        .content-card { padding: 24px; border-radius: 12px; background: white; }
+        .sticky-ad-link {
+          position: fixed;
+          left: 18px;
+          right: 18px;
+          top: 112px;
+          z-index: 2147483647;
+          display: block;
+          min-height: 120px;
+          padding: 22px;
+          border-radius: 14px;
+          background: #fff2d8;
+          color: #4a2d00;
+          text-decoration: none;
+        }
+      </style>
+    </head>
+    <body>
+      <main>
+        <section class="content-card">Content</section>
+        <a class="sticky-ad-link" href="#ad-clicked">Sticky ad link</a>
+      </main>
+      <script>
+        window.__activationEvents = [];
+        const ad = document.querySelector('.sticky-ad-link');
+        ['pointerdown', 'mousedown', 'touchstart', 'click'].forEach(type => {
+          ad.addEventListener(type, () => window.__activationEvents.push('ad:' + type));
+        });
+        document.body.addEventListener('click', event => {
+          if (event.target.closest('.sticky-ad-link')) window.__activationEvents.push('body:click');
+        });
+      </script>
+    </body>
+  </html>`;
+
+  const { context, page, pageErrors } = await openMesPage(browser, html, {
+    compactPickerMode: false,
+    hideStrategy: 'stylesheet'
+  });
+
+  await page.locator('#mobile-block-toggleBtn').click();
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  await page.waitForSelector('#mes-selection-capture-layer.active', { timeout: 5000 });
+  const captureBox = await page.locator('#mes-selection-capture-layer').boundingBox();
+  if (!captureBox || captureBox.width < 300 || captureBox.height < 600) {
+    throw new Error(`selection capture layer is not covering the viewport: ${JSON.stringify(captureBox)}`);
+  }
+  const targetBox = await page.locator('.sticky-ad-link').boundingBox();
+  await page.touchscreen.tap(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2);
+  await page.waitForTimeout(350);
+  const activationEvents = await page.evaluate(() => window.__activationEvents);
+  if (activationEvents.length) throw new Error(`selection mode leaked page activation events: ${activationEvents.join(', ')}`);
+  const hash = await page.evaluate(() => location.hash);
+  if (hash) throw new Error(`selection mode allowed link navigation: ${hash}`);
+  const selected = await page.locator('#blocker-info').innerText();
+  if (!selected.includes('sticky-ad-link')) throw new Error(`sticky ad was not selected: ${selected}`);
+  await context.close();
+  if (pageErrors.length) throw new Error(`selection capture flow page errors: ${pageErrors.join('\\n')}`);
+}
+
 async function runResponsiveClippingFlow(browser) {
   const html = `<!doctype html>
   <html>
@@ -294,6 +450,7 @@ async function runResponsiveClippingFlow(browser) {
   </html>`;
 
   for (const viewport of [
+    { width: 300, height: 844 },
     { width: 320, height: 844 },
     { width: 360, height: 844 },
     { width: 390, height: 844 },
@@ -871,6 +1028,8 @@ async function run() {
   const browser = await chromium.launch({ headless: true });
   try {
     await runMainFlow(browser);
+    await runLanguageFlow(browser);
+    await runSelectionCaptureFlow(browser);
     await runResponsiveClippingFlow(browser);
     await runAdvancedFlow(browser);
     await runBlockingGuardFlow(browser);
