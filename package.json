@@ -1,6 +1,6 @@
 {
   "name": "mes-userscript",
-  "version": "2.1.1",
+  "version": "2.1.2",
   "private": true,
   "type": "commonjs",
   "scripts": {

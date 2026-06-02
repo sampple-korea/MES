@@ -6,6 +6,10 @@ MES is an advanced userscript for selecting and hiding web page elements on mobi
 
 [Install from GitHub](https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.min.js) · [Source code](https://github.com/sampple-korea/MES)
 
+## 2.1.2
+
+MES 2.1.2 prevents duplicate dashboard buttons from appearing inside iframes. Saved blocking rules and DOM watching still run inside iframes, but the visible button and panels are only created in the top-level page.
+
 ## 2.1.1
 
 MES 2.1.1 adds UI language switching for Korean, English, Chinese, and Japanese. Korean remains the default language, and installation/update continues through GitHub raw `MES.min.js`.
