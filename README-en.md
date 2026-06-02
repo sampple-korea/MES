@@ -6,6 +6,10 @@ MES is an advanced userscript for selecting and hiding web page elements on mobi
 
 [Install from GitHub](https://raw.githubusercontent.com/sampple-korea/MES/refs/heads/main/MES.min.js) · [Source code](https://github.com/sampple-korea/MES)
 
+## 2.1.3
+
+MES 2.1.3 strengthens UI front-order protection so the MES button and panels stay on top even when external overlays or page UI are added later.
+
 ## 2.1.2
 
 MES 2.1.2 prevents duplicate dashboard buttons from appearing inside iframes. Saved blocking rules and DOM watching still run inside iframes, but the visible button and panels are only created in the top-level page.

@@ -541,6 +541,66 @@ async function runFrameWorkerFlow(browser) {
   if (pageErrors.length) throw new Error(`frame worker flow page errors: ${pageErrors.join('\\n')}`);
 }
 
+async function runUiFrontGuardFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; min-height: 100vh; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; }
+        .content-card { padding: 24px; border-radius: 12px; background: white; }
+      </style>
+    </head>
+    <body>
+      <main><section class="content-card">Top guard target</section></main>
+    </body>
+  </html>`;
+
+  const { context, page, pageErrors } = await openMesPage(browser, html, {});
+  await page.waitForSelector('#mobile-block-toggleBtn', { timeout: 5000 });
+  await page.evaluate(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    const rect = button.getBoundingClientRect();
+    const blocker = document.createElement('button');
+    blocker.id = 'external-top-overlay';
+    blocker.textContent = 'external';
+    Object.assign(blocker.style, {
+      position: 'fixed',
+      left: `${rect.left - 6}px`,
+      top: `${rect.top - 6}px`,
+      width: `${rect.width + 12}px`,
+      height: `${rect.height + 12}px`,
+      zIndex: '2147483647',
+      border: '0',
+      background: 'rgba(255,0,0,0.2)'
+    });
+    document.body.appendChild(blocker);
+  });
+  await page.waitForFunction(() => {
+    const button = document.querySelector('#mobile-block-toggleBtn');
+    if (!button) return false;
+    const rect = button.getBoundingClientRect();
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    return hit === button || button.contains(hit);
+  }, null, { timeout: 5000 });
+  const trailingOrder = await page.evaluate(() => Array.from(document.body.children).slice(-7).map(node => node.id));
+  const expectedOrder = [
+    'mes-selection-capture-layer',
+    'mobile-block-panel',
+    'mobile-blocklist-panel',
+    'mobile-inspector-panel',
+    'mobile-settings-panel',
+    'mobile-block-toggleBtn',
+    'mes-toast-container'
+  ];
+  if (trailingOrder.join('|') !== expectedOrder.join('|')) {
+    throw new Error(`MES UI does not own the trailing stack: ${trailingOrder.join(', ')}`);
+  }
+  await context.close();
+  if (pageErrors.length) throw new Error(`ui front guard flow page errors: ${pageErrors.join('\\n')}`);
+}
+
 async function runResponsiveClippingFlow(browser) {
   const html = `<!doctype html>
   <html>
@@ -1144,6 +1204,7 @@ async function run() {
     await runHideStrategyNoticeFlow(browser);
     await runSelectionCaptureFlow(browser);
     await runFrameWorkerFlow(browser);
+    await runUiFrontGuardFlow(browser);
     await runResponsiveClippingFlow(browser);
     await runAdvancedFlow(browser);
     await runBlockingGuardFlow(browser);
