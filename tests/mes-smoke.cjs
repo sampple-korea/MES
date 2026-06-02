@@ -361,6 +361,54 @@ async function runLanguageFlow(browser) {
   }
 }
 
+async function runHideStrategyNoticeFlow(browser) {
+  const html = `<!doctype html>
+  <html>
+    <head>
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>
+        body { margin: 0; font-family: system-ui, sans-serif; background: #f6f7f9; }
+        main { padding: 20px; display: grid; gap: 14px; }
+        .content-card { padding: 24px; border-radius: 12px; background: white; }
+      </style>
+    </head>
+    <body><main><section class="content-card">Hide strategy target</section></main></body>
+  </html>`;
+
+  const { context, page } = await openMesPage(browser, html, { hideStrategy: 'stylesheet' });
+  await page.locator('#mobile-block-toggleBtn').click();
+  await page.waitForSelector('#mobile-block-panel.visible', { timeout: 5000 });
+  await page.locator('#blocker-more').click();
+  await page.waitForSelector('#blocker-secondary-actions.visible', { timeout: 5000 });
+  await page.locator('#blocker-settings').click();
+  await page.waitForSelector('#mobile-settings-panel.visible', { timeout: 5000 });
+
+  const expectations = [
+    { strategy: 'stylesheet', text: ['장점', 'CSS', '동적 페이지'] },
+    { strategy: 'display', text: ['장점', '빈 공간', 'display'] },
+    { strategy: 'visibility', text: ['장점', '공간', 'pointer-events'] },
+    { strategy: 'opacity', text: ['장점', '투명', '공간'] }
+  ];
+
+  for (const expectation of expectations) {
+    await page.locator(`[data-hide-strategy="${expectation.strategy}"]`).click();
+    await page.waitForFunction(strategy => {
+      const settings = JSON.parse(localStorage.getItem('mobileElementSelectorSettings_v1_2') || '{}');
+      return settings.hideStrategy === strategy;
+    }, expectation.strategy, { timeout: 5000 });
+    const activeStrategy = await page.locator('.hide-strategy-btn.active').getAttribute('data-hide-strategy');
+    if (activeStrategy !== expectation.strategy) {
+      throw new Error(`hide strategy active button mismatch: ${activeStrategy}`);
+    }
+    const note = await page.locator('#settings-hide-strategy-note').innerText();
+    for (const text of expectation.text) {
+      if (!note.includes(text)) throw new Error(`hide strategy notice missing "${text}" for ${expectation.strategy}: ${note}`);
+    }
+  }
+
+  await context.close();
+}
+
 async function runSelectionCaptureFlow(browser) {
   const html = `<!doctype html>
   <html>
@@ -1093,6 +1141,7 @@ async function run() {
   try {
     await runMainFlow(browser);
     await runLanguageFlow(browser);
+    await runHideStrategyNoticeFlow(browser);
     await runSelectionCaptureFlow(browser);
     await runFrameWorkerFlow(browser);
     await runResponsiveClippingFlow(browser);
